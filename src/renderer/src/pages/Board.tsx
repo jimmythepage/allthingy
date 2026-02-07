@@ -20,7 +20,6 @@ import { MarkdownNotebookTool } from '../components/canvas/MarkdownNotebookTool'
 import NotebookSidebar from '../components/sidebar/NotebookSidebar'
 import SyncStatus from '../components/github/SyncStatus'
 import SearchPalette from '../components/sidebar/SearchPalette'
-import { useKeyboardShortcuts } from '../lib/keyboard-shortcuts'
 
 const AUTOSAVE_DELAY = 2000
 
@@ -126,44 +125,23 @@ export default function Board(): JSX.Element {
   const { boardId, workspacePath: encodedWorkspacePath } = useParams()
   const navigate = useNavigate()
   const workspacePath = encodedWorkspacePath ? decodeURIComponent(encodedWorkspacePath) : ''
+
+  // Use a ref that is always current — never stale in closures
   const editorRef = useRef<Editor | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isLoadingSnapshot = useRef(false)
+  const workspacePathRef = useRef(workspacePath)
+  workspacePathRef.current = workspacePath
+  const boardIdRef = useRef(boardId)
+  boardIdRef.current = boardId
+
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const [initialSnapshot, setInitialSnapshot] = useState<unknown>(undefined)
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showSearch, setShowSearch] = useState(false)
-  const isLoadingSnapshot = useRef(false)
-
-  // Keyboard shortcuts
-  useKeyboardShortcuts(
-    useMemo(
-      () => ({
-        'meta+p': () => setShowSearch(true),
-        'meta+n': () => {
-          const editor = editorRef.current
-          if (!editor) return
-          const notebookId = `note-${Date.now()}`
-          const { x, y } = editor.getViewportPageCenter()
-          editor.createShape({
-            type: MARKDOWN_NOTEBOOK_TYPE,
-            x: x - 160,
-            y: y - 200,
-            props: {
-              w: 320,
-              h: 400,
-              notebookId,
-              title: 'Untitled',
-              markdown: '# Untitled\n\nStart writing...'
-            }
-          })
-        },
-        'meta+b': () => setSidebarOpen((prev) => !prev),
-        'meta+\\': () => setSidebarOpen((prev) => !prev)
-      }),
-      []
-    )
-  )
+  // This state is only used to force re-render when editor becomes available
+  const [, setEditorReady] = useState(0)
 
   // Load existing board data on mount
   useEffect(() => {
@@ -190,18 +168,20 @@ export default function Board(): JSX.Element {
     }
   }, [workspacePath, boardId])
 
-  // Save function
+  // Save function — uses refs to always have current values
   const saveBoard = useCallback(async () => {
     const editor = editorRef.current
-    if (!editor || !workspacePath || !boardId) return
+    const wsPath = workspacePathRef.current
+    const bId = boardIdRef.current
+    if (!editor || !wsPath || !bId) return
     if (isLoadingSnapshot.current) return
 
     setSaveStatus('saving')
     try {
       const { document, session } = getSnapshot(editor.store)
       const boardData = {
-        id: boardId,
-        name: boardId,
+        id: bId,
+        name: bId,
         tldrawDocument: { document, session },
         notebookPlacements: {},
         metadata: {
@@ -209,7 +189,7 @@ export default function Board(): JSX.Element {
           modified: new Date().toISOString()
         }
       }
-      await window.api.board.save(workspacePath, boardId, boardData)
+      await window.api.board.save(wsPath, bId, boardData)
 
       // Also save each markdown notebook shape as a .md file
       const allShapes = editor.getCurrentPageShapes()
@@ -229,7 +209,7 @@ export default function Board(): JSX.Element {
               '---'
             ].join('\n')
             const content = `${frontmatter}\n${props.markdown}`
-            await window.api.notebook.save(workspacePath, props.notebookId, content)
+            await window.api.notebook.save(wsPath, props.notebookId, content)
           }
         }
       }
@@ -239,7 +219,7 @@ export default function Board(): JSX.Element {
       console.error('Failed to save board:', err)
       setSaveStatus('unsaved')
     }
-  }, [workspacePath, boardId])
+  }, [])
 
   // Debounced auto-save
   const scheduleSave = useCallback(() => {
@@ -257,15 +237,16 @@ export default function Board(): JSX.Element {
   }, [])
 
   const handleMount = useCallback(
-    (editor: Editor) => {
-      editorRef.current = editor
-      editor.user.updateUserPreferences({ colorScheme: 'dark' })
+    (mountedEditor: Editor) => {
+      editorRef.current = mountedEditor
+      setEditorReady((n) => n + 1)
+      mountedEditor.user.updateUserPreferences({ colorScheme: 'dark' })
 
       // Load existing snapshot if available
       if (initialSnapshot) {
         isLoadingSnapshot.current = true
         try {
-          loadSnapshot(editor.store, initialSnapshot as Parameters<typeof loadSnapshot>[1])
+          loadSnapshot(mountedEditor.store, initialSnapshot as Parameters<typeof loadSnapshot>[1])
         } catch (err) {
           console.error('Failed to load snapshot into editor:', err)
         }
@@ -273,7 +254,7 @@ export default function Board(): JSX.Element {
       }
 
       // Listen for changes to auto-save
-      const unsubscribe = editor.store.listen(
+      const unsubscribe = mountedEditor.store.listen(
         (_info: TLStoreEventInfo) => {
           scheduleSave()
         },
@@ -288,17 +269,21 @@ export default function Board(): JSX.Element {
     [initialSnapshot, scheduleSave, saveBoard]
   )
 
-  const handleAddNotebook = useCallback(() => {
-    const editor = editorRef.current
-    if (!editor) return
+  // Add notebook — reads from ref directly, no stale closure issues
+  function addNotebook(): void {
+    const ed = editorRef.current
+    if (!ed) {
+      console.warn('Editor not ready yet — editorRef.current is null')
+      return
+    }
 
     const notebookId = `note-${Date.now()}`
-    const { x, y } = editor.getViewportPageCenter()
+    const center = ed.getViewportPageCenter()
 
-    editor.createShape({
+    ed.createShape({
       type: MARKDOWN_NOTEBOOK_TYPE,
-      x: x - 160,
-      y: y - 200,
+      x: center.x - 160,
+      y: center.y - 200,
       props: {
         w: 320,
         h: 400,
@@ -307,6 +292,37 @@ export default function Board(): JSX.Element {
         markdown: '# Untitled\n\nStart writing...'
       }
     })
+  }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handler(e: KeyboardEvent): void {
+      const target = e.target as HTMLElement
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.contentEditable === 'true' ||
+        target.closest('.cm-editor')
+      ) {
+        return
+      }
+
+      const isMeta = e.metaKey || e.ctrlKey
+
+      if (isMeta && e.key === 'p') {
+        e.preventDefault()
+        setShowSearch(true)
+      } else if (isMeta && e.key === 'n') {
+        e.preventDefault()
+        addNotebook()
+      } else if (isMeta && (e.key === 'b' || e.key === '\\')) {
+        e.preventDefault()
+        setSidebarOpen((prev) => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
   }, [])
 
   const tldrawKey = useMemo(() => {
@@ -349,7 +365,7 @@ export default function Board(): JSX.Element {
         <button
           style={styles.toolBtn}
           className="titlebar-no-drag"
-          onClick={handleAddNotebook}
+          onClick={() => addNotebook()}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
         >
