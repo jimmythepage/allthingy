@@ -276,8 +276,9 @@ export default function Settings(): JSX.Element {
         <div style={styles.section}>
           <h2 style={styles.sectionTitle}>GitHub OAuth App</h2>
           <p style={styles.description}>
-            To use GitHub features, you need to create a GitHub OAuth App and enter its Client ID
-            here. Go to{' '}
+            To use GitHub features, you need to create a GitHub OAuth App:
+            <br /><br />
+            1. Go to{' '}
             <a
               href="#"
               style={{ color: 'var(--accent)' }}
@@ -289,8 +290,17 @@ export default function Settings(): JSX.Element {
               }}
             >
               GitHub Developer Settings
-            </a>{' '}
-            to create one. Set the callback URL to <code>http://localhost</code>.
+            </a>
+            <br />
+            2. Click <strong>"New OAuth App"</strong>
+            <br />
+            3. Set Homepage URL to <code>http://localhost</code>
+            <br />
+            4. Set Authorization callback URL to <code>http://localhost</code>
+            <br />
+            5. <strong style={{ color: 'var(--warning)' }}>Check "Enable Device Flow"</strong> (required!)
+            <br />
+            6. Copy the <strong>Client ID</strong> and paste it below
           </p>
 
           <label style={styles.label}>Client ID</label>

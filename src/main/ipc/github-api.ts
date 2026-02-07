@@ -100,7 +100,22 @@ export function registerGitHubHandlers(): void {
     })
 
     if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.status}`)
+      let detail = ''
+      try {
+        const body = await response.json()
+        detail = body.error_description || body.message || JSON.stringify(body)
+      } catch {
+        detail = await response.text()
+      }
+
+      if (response.status === 400) {
+        throw new Error(
+          `GitHub rejected the request (400). Make sure your OAuth App has "Enable Device Flow" checked in its settings. ` +
+          `Go to https://github.com/settings/developers → your app → check "Enable Device Flow". ` +
+          `(Detail: ${detail})`
+        )
+      }
+      throw new Error(`GitHub API error ${response.status}: ${detail}`)
     }
 
     return await response.json()
