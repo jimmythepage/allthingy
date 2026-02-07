@@ -272,18 +272,17 @@ export default function Board(): JSX.Element {
   // Add notebook — reads from ref directly, no stale closure issues
   function addNotebook(): void {
     const ed = editorRef.current
-    if (!ed) {
-      console.warn('Editor not ready yet — editorRef.current is null')
-      return
-    }
+    if (!ed) return
 
     const notebookId = `note-${Date.now()}`
-    const center = ed.getViewportPageCenter()
+    const viewportBounds = ed.getViewportPageBounds()
+    const cx = viewportBounds.x + viewportBounds.w / 2
+    const cy = viewportBounds.y + viewportBounds.h / 2
 
     ed.createShape({
       type: MARKDOWN_NOTEBOOK_TYPE,
-      x: center.x - 160,
-      y: center.y - 200,
+      x: cx - 160,
+      y: cy - 200,
       props: {
         w: 320,
         h: 400,
@@ -353,7 +352,11 @@ export default function Board(): JSX.Element {
         <button
           style={styles.backBtn}
           className="titlebar-no-drag"
-          onClick={() => navigate('/')}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            navigate('/')
+          }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
@@ -365,7 +368,11 @@ export default function Board(): JSX.Element {
         <button
           style={styles.toolBtn}
           className="titlebar-no-drag"
-          onClick={() => addNotebook()}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            addNotebook()
+          }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
         >
@@ -377,7 +384,11 @@ export default function Board(): JSX.Element {
             background: sidebarOpen ? 'var(--bg-hover)' : 'var(--bg-tertiary)'
           }}
           className="titlebar-no-drag"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            setSidebarOpen(!sidebarOpen)
+          }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
           onMouseLeave={(e) =>
             (e.currentTarget.style.background = sidebarOpen
