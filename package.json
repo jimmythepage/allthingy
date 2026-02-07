@@ -7,7 +7,23 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
+    "pack": "electron-vite build && electron-builder --dir",
+    "dist": "electron-vite build && electron-builder",
     "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.bbboard.app",
+    "productName": "bbboard",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "mac": {
+      "target": "dir",
+      "category": "public.app-category.productivity"
+    }
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.0",
