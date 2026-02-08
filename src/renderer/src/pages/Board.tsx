@@ -146,11 +146,7 @@ const styles = {
     borderRadius: 'var(--radius-sm)',
     transition: 'background var(--transition)'
   },
-  title: {
-    fontSize: 15,
-    fontWeight: 600,
-    letterSpacing: '-0.3px'
-  },
+  
   toolBtn: {
     fontSize: 13,
     color: 'var(--text-secondary)',
@@ -517,9 +513,7 @@ export default function Board(): JSX.Element {
         >
           &#8592; Home
         </button>
-        <span style={styles.title} className="titlebar-no-drag">
-          {boardId}
-        </span>
+        
         <button
           style={styles.toolBtn}
           className="titlebar-no-drag"
