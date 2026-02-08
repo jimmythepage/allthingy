@@ -1,5 +1,5 @@
 {
-  "name": "bbboard",
+  "name": "allthingy",
   "version": "0.1.0",
   "description": "Infinite canvas with markdown notebooks, powered by GitHub",
   "main": "./out/main/index.js",
@@ -12,8 +12,8 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {
-    "appId": "com.bbboard.app",
-    "productName": "bbboard",
+    "appId": "com.allthingy.app",
+    "productName": "AllThingy",
     "directories": {
       "output": "release"
     },

@@ -181,7 +181,7 @@ export default function SyncStatus({ workspacePath }: SyncStatusProps): JSX.Elem
       // Commit any pending changes
       const status = await window.api.git.status(workspacePath)
       if (status && !status.isClean) {
-        await window.api.git.commit(workspacePath, `bbboard auto-save ${new Date().toISOString()}`)
+        await window.api.git.commit(workspacePath, `AllThingy auto-save ${new Date().toISOString()}`)
       }
 
       // Pull first, then push
@@ -219,7 +219,7 @@ export default function SyncStatus({ workspacePath }: SyncStatusProps): JSX.Elem
       setRemoteUrl(repo.clone_url)
 
       // Initial commit and push
-      await window.api.git.commit(workspacePath, 'Initial bbboard workspace')
+      await window.api.git.commit(workspacePath, 'Initial AllThingy workspace')
       await window.api.git.push(workspacePath, token)
 
       setShowSetup(false)
@@ -247,7 +247,7 @@ export default function SyncStatus({ workspacePath }: SyncStatusProps): JSX.Elem
           style={styles.setupBtn}
           className="titlebar-no-drag"
           onClick={() => {
-            const workspaceName = workspacePath.split('/').pop() || 'bbboard-workspace'
+            const workspaceName = workspacePath.split('/').pop() || 'allthingy-workspace'
             setRepoName(workspaceName)
             setShowSetup(true)
           }}

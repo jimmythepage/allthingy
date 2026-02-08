@@ -57,7 +57,7 @@ export async function notifyMentions(
 ): Promise<number[]> {
   const { token, user } = useGitHubStore.getState()
 
-  console.log('[bbboard] notifyMentions called', {
+  console.log('[AllThingy] notifyMentions called', {
     hasToken: !!token,
     repoFullNameHint,
     newTextLen: newText.length,
@@ -65,24 +65,24 @@ export async function notifyMentions(
   })
 
   if (!token) {
-    console.log('[bbboard] No GitHub token, skipping mention notifications')
+    console.log('[AllThingy] No GitHub token, skipping mention notifications')
     return []
   }
 
   const repoFullName = await resolveRepoFullName(repoFullNameHint)
   if (!repoFullName) {
-    console.log('[bbboard] No repoFullName resolved, skipping mention notifications')
+    console.log('[AllThingy] No repoFullName resolved, skipping mention notifications')
     return []
   }
 
   const newMentions = findNewMentions(newText, previousText)
-  console.log('[bbboard] New mentions found:', newMentions)
+  console.log('[AllThingy] New mentions found:', newMentions)
 
   if (newMentions.length === 0) return []
 
   const mentionsToNotify = newMentions
 
-  console.log('[bbboard] Mentions to notify:', mentionsToNotify)
+  console.log('[AllThingy] Mentions to notify:', mentionsToNotify)
 
   if (mentionsToNotify.length === 0) return []
 
@@ -97,17 +97,17 @@ export async function notifyMentions(
         '',
         '> ' + snippet.split('\n').join('\n> '),
         '',
-        '*This notification was created automatically by bbboard.*'
+        '*This notification was created automatically by AllThingy.*'
       ].join('\n')
 
-      console.log('[bbboard] Creating issue for @' + username, { title, repoFullName })
+      console.log('[AllThingy] Creating issue for @' + username, { title, repoFullName })
       const result = await window.api.comments.createIssue(token, repoFullName, title, body)
-      console.log('[bbboard] Issue created:', result?.number)
+      console.log('[AllThingy] Issue created:', result?.number)
       if (result?.number) {
         createdIssueNumbers.push(result.number)
       }
     } catch (err) {
-      console.error(`[bbboard] Failed to notify @${username}:`, err)
+      console.error(`[AllThingy] Failed to notify @${username}:`, err)
     }
   }
 

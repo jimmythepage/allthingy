@@ -254,7 +254,7 @@ export default function Settings(): JSX.Element {
             <>
               <p style={styles.description}>
                 Connect your GitHub account to sync workspaces, share boards, and collaborate with
-                others. bbboard uses the GitHub Device Flow for authentication.
+                others. AllThingy uses the GitHub Device Flow for authentication.
               </p>
               <div style={styles.actions}>
                 <button

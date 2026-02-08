@@ -287,13 +287,13 @@ export default function Home(): JSX.Element {
     <div style={styles.container}>
       <div style={styles.titlebar} className="titlebar-drag">
         <span style={styles.title} className="titlebar-no-drag">
-          bbboard
+          AllThingy
         </span>
       </div>
 
       <div style={styles.body}>
         <div style={styles.content}>
-          <h1 style={styles.heading}>Welcome to bbboard</h1>
+          <h1 style={styles.heading}>Welcome to AllThingy</h1>
           <p style={styles.subtitle}>
             Infinite canvas meets connected notebooks. Create or open a workspace to get started.
           </p>

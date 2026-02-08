@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-const STORAGE_KEY = 'bbboard:editor-prefs'
+const STORAGE_KEY = 'allthingy:editor-prefs'
 
 interface EditorPrefs {
   colorScheme: 'dark' | 'light' | 'system'

@@ -8,7 +8,7 @@ export interface WorkspaceInfo {
   lastOpened: string
 }
 
-const WORKSPACE_MARKER = '.bbboard'
+const WORKSPACE_MARKER = '.allthingy'
 
 function ensureDir(dir: string): void {
   if (!existsSync(dir)) {

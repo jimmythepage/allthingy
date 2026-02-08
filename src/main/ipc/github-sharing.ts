@@ -87,7 +87,7 @@ export function registerSharingHandlers(): void {
           body: JSON.stringify({
             title,
             body,
-            labels: ['bbboard-comment']
+            labels: ['allthingy-comment']
           })
         }
       )
@@ -132,7 +132,7 @@ export function registerSharingHandlers(): void {
     'comments:list-issues',
     async (_event, token: string, repoFullName: string) => {
       const response = await fetch(
-        `https://api.github.com/repos/${repoFullName}/issues?labels=bbboard-comment&state=open&sort=updated&direction=desc`,
+        `https://api.github.com/repos/${repoFullName}/issues?labels=allthingy-comment&state=open&sort=updated&direction=desc`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

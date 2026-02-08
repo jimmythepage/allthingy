@@ -224,7 +224,7 @@ export default function Board(): JSX.Element {
 
       await window.api.git.push(wsPath, token)
     } catch (err) {
-      console.warn('[bbboard] Auto-sync failed:', err)
+      console.warn('[AllThingy] Auto-sync failed:', err)
     }
   }, [])
 

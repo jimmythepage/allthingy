@@ -6,7 +6,7 @@ import { join } from 'path'
 const DEFAULT_GITIGNORE = `.DS_Store
 *.log
 node_modules/
-.bbboard/local/
+.allthingy/local/
 `
 
 function getGit(workspacePath: string): SimpleGit {
@@ -167,7 +167,7 @@ export function registerGitHandlers(): void {
         body: JSON.stringify({
           name,
           private: isPrivate,
-          description: `bbboard workspace: ${name}`,
+          description: `AllThingy workspace: ${name}`,
           auto_init: false
         })
       })

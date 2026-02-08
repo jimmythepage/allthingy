@@ -1,4 +1,4 @@
-# bbboard
+# AllThingy
 
 Infinite canvas meets connected notebooks. A desktop app that combines Miro-style boards with Obsidian-style markdown notebooks, powered by GitHub for sync and collaboration.
 
@@ -42,7 +42,7 @@ npm run build
 1. Create a [GitHub OAuth App](https://github.com/settings/developers)
 2. Set callback URL to `http://localhost`
 3. Copy the Client ID
-4. Open Settings in bbboard and paste the Client ID
+4. Open Settings in AllThingy and paste the Client ID
 5. Click "Connect GitHub Account" and follow the device flow
 
 ## Workspace Structure
@@ -51,7 +51,7 @@ Each workspace is a directory (and a git repo):
 
 ```
 my-workspace/
-  .bbboard/
+  .allthingy/
     config.json
   boards/
     board-abc.json

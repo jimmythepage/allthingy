@@ -31,7 +31,7 @@ interface WorkspaceState {
   setCurrentBoardId: (id: string | null) => void
 }
 
-const RECENT_WORKSPACES_KEY = 'bbboard:recent-workspaces'
+const RECENT_WORKSPACES_KEY = 'allthingy:recent-workspaces'
 
 function loadRecentWorkspaces(): WorkspaceInfo[] {
   try {

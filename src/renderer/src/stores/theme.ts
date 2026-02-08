@@ -8,7 +8,7 @@ interface ThemeState {
   toggleTheme: () => void
 }
 
-const THEME_KEY = 'bbboard:theme'
+const THEME_KEY = 'allthingy:theme'
 
 function loadTheme(): Theme {
   try {
