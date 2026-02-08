@@ -24,6 +24,7 @@ import NotebookSidebar from '../components/sidebar/NotebookSidebar'
 import SyncStatus from '../components/github/SyncStatus'
 import SearchPalette from '../components/sidebar/SearchPalette'
 import { CollaboratorsProvider } from '../lib/collaborators-context'
+import { useEditorPrefsStore } from '../stores/editor-prefs'
 
 const AUTOSAVE_DELAY = 2000
 
@@ -249,7 +250,15 @@ export default function Board(): JSX.Element {
     (mountedEditor: Editor) => {
       editorRef.current = mountedEditor
       setEditorReady((n) => n + 1)
-      mountedEditor.user.updateUserPreferences({ colorScheme: 'dark' })
+
+      // Apply persisted editor preferences
+      const prefs = useEditorPrefsStore.getState()
+      mountedEditor.user.updateUserPreferences({
+        colorScheme: prefs.colorScheme
+      })
+      mountedEditor.updateInstanceState({
+        isGridMode: prefs.isGridMode
+      })
 
       // Load existing snapshot if available
       if (initialSnapshot) {
@@ -263,15 +272,29 @@ export default function Board(): JSX.Element {
       }
 
       // Listen for changes to auto-save
-      const unsubscribe = mountedEditor.store.listen(
+      const unsubscribeDoc = mountedEditor.store.listen(
         (_info: TLStoreEventInfo) => {
           scheduleSave()
         },
         { scope: 'document', source: 'user' }
       )
 
+      // Listen for user preference changes and persist them
+      const unsubscribePrefs = mountedEditor.store.listen(
+        () => {
+          const userPrefs = mountedEditor.user.getUserPreferences()
+          const instanceState = mountedEditor.getInstanceState()
+          useEditorPrefsStore.getState().update({
+            colorScheme: userPrefs.colorScheme as 'dark' | 'light' | 'system',
+            isGridMode: instanceState.isGridMode
+          })
+        },
+        { scope: 'session' }
+      )
+
       return () => {
-        unsubscribe()
+        unsubscribeDoc()
+        unsubscribePrefs()
         saveBoard()
       }
     },
@@ -319,7 +342,8 @@ export default function Board(): JSX.Element {
         w: 220,
         h: 120,
         text: '',
-        author: 'You'
+        author: 'You',
+        resolved: false
       }
     })
   }

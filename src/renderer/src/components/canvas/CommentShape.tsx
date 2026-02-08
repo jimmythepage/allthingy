@@ -11,7 +11,13 @@ import {
   useIsEditing,
   useEditor
 } from 'tldraw'
-import { useCallback, useRef, useEffect } from 'react'
+import { autocompletion } from '@codemirror/autocomplete'
+import { mentionCompletionSource } from '../editor/MentionPlugin'
+import { useCollaborators, useRepoFullName } from '../../lib/collaborators-context'
+import { renderMarkdown } from '../../lib/markdown'
+import { notifyMentions } from '../../lib/mentions'
+import MarkdownEditor from '../editor/MarkdownEditor'
+import { useCallback, useMemo, useRef } from 'react'
 
 // --- Shape type registration ---
 
@@ -24,6 +30,7 @@ declare module 'tldraw' {
       h: number
       text: string
       author: string
+      resolved: boolean
     }
   }
 }
@@ -39,7 +46,8 @@ export class CommentShapeUtil extends ShapeUtil<CommentShape> {
     w: T.number,
     h: T.number,
     text: T.string,
-    author: T.string
+    author: T.string,
+    resolved: T.boolean
   }
 
   getDefaultProps(): CommentShape['props'] {
@@ -47,7 +55,8 @@ export class CommentShapeUtil extends ShapeUtil<CommentShape> {
       w: 220,
       h: 120,
       text: '',
-      author: 'You'
+      author: 'You',
+      resolved: false
     }
   }
 
@@ -89,30 +98,58 @@ export class CommentShapeUtil extends ShapeUtil<CommentShape> {
 function CommentComponent({ shape }: { shape: CommentShape }): JSX.Element {
   const isEditing = useIsEditing(shape.id)
   const editor = useEditor()
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const resolved = shape.props.resolved
 
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      textareaRef.current.focus()
-      textareaRef.current.setSelectionRange(
-        textareaRef.current.value.length,
-        textareaRef.current.value.length
-      )
-    }
-  }, [isEditing])
+  // Mention autocomplete from context
+  const collaborators = useCollaborators()
+  const repoFullName = useRepoFullName()
+  const getCollaborators = useCallback(() => collaborators, [collaborators])
+  const autocompleteExt = useMemo(() => {
+    return autocompletion({
+      override: [mentionCompletionSource(getCollaborators)]
+    })
+  }, [getCollaborators])
+
+  // Track previous text for mention diff
+  const prevTextRef = useRef(shape.props.text)
+  const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    (value: string) => {
       editor.updateShape<CommentShape>({
         id: shape.id,
         type: COMMENT_SHAPE_TYPE,
-        props: {
-          text: e.target.value
-        }
+        props: { text: value }
+      })
+
+      // Debounced mention notification (wait 3s after last edit)
+      if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current)
+      notifyTimerRef.current = setTimeout(() => {
+        const prev = prevTextRef.current
+        prevTextRef.current = value
+        notifyMentions(value, prev, `board comment by ${shape.props.author}`, repoFullName)
+      }, 3000)
+    },
+    [editor, shape.id, shape.props.author, repoFullName]
+  )
+
+  const toggleResolved = useCallback(
+    (e: React.PointerEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
+      editor.updateShape<CommentShape>({
+        id: shape.id,
+        type: COMMENT_SHAPE_TYPE,
+        props: { resolved: !resolved }
       })
     },
-    [editor, shape.id]
+    [editor, shape.id, resolved]
   )
+
+  const rendered = useMemo(() => {
+    if (isEditing || !shape.props.text) return null
+    return renderMarkdown(shape.props.text)
+  }, [shape.props.text, isEditing])
 
   const timestamp = new Date().toLocaleDateString(undefined, {
     month: 'short',
@@ -128,10 +165,11 @@ function CommentComponent({ shape }: { shape: CommentShape }): JSX.Element {
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        background: '#2d2418',
-        border: '1px solid #5c4a2a',
+        background: resolved ? '#1e1e1e' : '#2d2418',
+        border: `1px solid ${resolved ? '#333' : '#5c4a2a'}`,
         boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-        pointerEvents: 'all'
+        pointerEvents: 'all',
+        opacity: resolved ? 0.6 : 1
       }}
     >
       {/* Header */}
@@ -139,9 +177,9 @@ function CommentComponent({ shape }: { shape: CommentShape }): JSX.Element {
         style={{
           padding: '6px 10px',
           fontSize: 11,
-          color: '#c9a84c',
-          background: '#362d1a',
-          borderBottom: '1px solid #5c4a2a',
+          color: resolved ? '#666' : '#c9a84c',
+          background: resolved ? '#1a1a1a' : '#362d1a',
+          borderBottom: `1px solid ${resolved ? '#333' : '#5c4a2a'}`,
           flexShrink: 0,
           display: 'flex',
           alignItems: 'center',
@@ -149,8 +187,31 @@ function CommentComponent({ shape }: { shape: CommentShape }): JSX.Element {
           userSelect: 'none'
         }}
       >
-        <span style={{ fontWeight: 600 }}>{shape.props.author}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#8a7340' }}>
+        {/* Resolve toggle */}
+        <span
+          onPointerDown={toggleResolved}
+          style={{
+            cursor: 'pointer',
+            fontSize: 13,
+            lineHeight: 1,
+            opacity: resolved ? 1 : 0.5
+          }}
+          title={resolved ? 'Reopen comment' : 'Resolve comment'}
+        >
+          {resolved ? '\u2611' : '\u2610'}
+        </span>
+        <span
+          style={{
+            fontWeight: 600,
+            textDecoration: resolved ? 'line-through' : 'none'
+          }}
+        >
+          {shape.props.author}
+        </span>
+        {resolved && (
+          <span style={{ fontSize: 9, color: '#4a4', fontWeight: 500 }}>Resolved</span>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: resolved ? '#555' : '#8a7340' }}>
           {timestamp}
         </span>
       </div>
@@ -164,38 +225,28 @@ function CommentComponent({ shape }: { shape: CommentShape }): JSX.Element {
         }}
       >
         {isEditing ? (
-          <textarea
-            ref={textareaRef}
-            value={shape.props.text}
+          <MarkdownEditor
+            initialValue={shape.props.text}
             onChange={handleChange}
+            autoFocus
             placeholder="Write a comment..."
-            style={{
-              width: '100%',
-              height: '100%',
-              padding: '8px 10px',
-              fontSize: 12,
-              lineHeight: 1.5,
-              color: '#e0d6c0',
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              resize: 'none',
-              fontFamily: 'inherit'
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
+            extensions={[autocompleteExt]}
           />
         ) : (
           <div
+            className="markdown-preview"
             style={{
               padding: '8px 10px',
               fontSize: 12,
               lineHeight: 1.5,
-              color: '#e0d6c0',
-              whiteSpace: 'pre-wrap',
+              color: resolved ? '#888' : '#e0d6c0',
+              textDecoration: resolved ? 'line-through' : 'none',
               wordWrap: 'break-word'
             }}
           >
-            {shape.props.text || (
+            {rendered ? (
+              <span dangerouslySetInnerHTML={{ __html: rendered.html }} />
+            ) : (
               <span style={{ color: '#8a7340', fontStyle: 'italic' }}>
                 Double-click to add a comment...
               </span>

@@ -1,28 +1,19 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useGitHubStore } from '../../stores/github'
+import { useState, useEffect, useCallback, useMemo, type RefObject } from 'react'
+import { Editor } from 'tldraw'
+import { COMMENT_SHAPE_TYPE, type CommentShape } from '../canvas/CommentShape'
 import { renderMarkdown } from '../../lib/markdown'
 
+type FilterMode = 'open' | 'closed' | 'all'
+
 interface CommentsPanelProps {
-  workspacePath: string
-  boardId: string
-  repoFullName: string | null
+  editorRef: RefObject<Editor | null>
 }
 
-interface IssueComment {
-  id: number
-  body: string
-  user: { login: string; avatar_url: string }
-  created_at: string
-}
-
-interface Issue {
-  number: number
-  title: string
-  body: string
-  user: { login: string; avatar_url: string }
-  created_at: string
-  updated_at: string
-  comments: number
+interface CommentData {
+  shapeId: string
+  text: string
+  author: string
+  resolved: boolean
 }
 
 const styles = {
@@ -31,14 +22,22 @@ const styles = {
     flexDirection: 'column' as const,
     height: '100%'
   },
-  header: {
-    padding: '8px 12px',
-    fontSize: 12,
-    color: '#888',
+  filterBar: {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: 4,
+    padding: '8px 12px',
     borderBottom: '1px solid #2a2a2a'
+  },
+  filterBtn: {
+    flex: 1,
+    padding: '4px 0',
+    fontSize: 11,
+    fontWeight: 600,
+    textAlign: 'center' as const,
+    cursor: 'pointer',
+    borderRadius: 4,
+    border: 'none',
+    transition: 'all 150ms ease'
   },
   list: {
     flex: 1,
@@ -46,8 +45,10 @@ const styles = {
     padding: '4px 0'
   },
   comment: {
-    padding: '8px 12px',
-    borderBottom: '1px solid #222'
+    padding: '10px 12px',
+    borderBottom: '1px solid #222',
+    cursor: 'pointer',
+    transition: 'background 150ms ease'
   },
   commentHeader: {
     display: 'flex',
@@ -55,54 +56,36 @@ const styles = {
     gap: 6,
     marginBottom: 4
   },
-  avatar: {
-    width: 18,
-    height: 18,
-    borderRadius: '50%'
-  },
   author: {
     fontSize: 12,
     fontWeight: 600,
     color: '#ccc'
   },
-  date: {
-    fontSize: 10,
-    color: '#666',
-    marginLeft: 'auto'
+  statusBadge: {
+    fontSize: 9,
+    padding: '1px 5px',
+    borderRadius: 3,
+    fontWeight: 600
   },
   commentBody: {
     fontSize: 12,
     color: '#bbb',
-    lineHeight: 1.5
+    lineHeight: 1.5,
+    overflow: 'hidden',
+    maxHeight: 60
   },
-  inputArea: {
-    padding: 10,
-    borderTop: '1px solid #2a2a2a',
+  actions: {
     display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 6
+    gap: 6,
+    marginTop: 6
   },
-  textarea: {
-    width: '100%',
-    minHeight: 50,
-    padding: 8,
-    fontSize: 12,
-    background: '#1e1e1e',
+  actionBtn: {
+    fontSize: 10,
+    padding: '2px 8px',
+    borderRadius: 4,
     border: '1px solid #333',
-    borderRadius: 6,
-    color: '#e0e0e0',
-    outline: 'none',
-    resize: 'vertical' as const,
-    fontFamily: 'inherit'
-  },
-  sendBtn: {
-    alignSelf: 'flex-end' as const,
-    padding: '5px 12px',
-    fontSize: 11,
-    background: 'var(--accent)',
-    color: '#fff',
-    borderRadius: 6,
-    border: 'none',
+    background: 'transparent',
+    color: '#999',
     cursor: 'pointer'
   },
   empty: {
@@ -114,225 +97,182 @@ const styles = {
   }
 }
 
-export default function CommentsPanel({
-  workspacePath,
-  boardId,
-  repoFullName
-}: CommentsPanelProps): JSX.Element {
-  const { token, user } = useGitHubStore()
-  const [issues, setIssues] = useState<Issue[]>([])
-  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
-  const [comments, setComments] = useState<IssueComment[]>([])
-  const [newComment, setNewComment] = useState('')
-  const [loading, setLoading] = useState(false)
+export default function CommentsPanel({ editorRef }: CommentsPanelProps): JSX.Element {
+  const [comments, setComments] = useState<CommentData[]>([])
+  const [filter, setFilter] = useState<FilterMode>('open')
 
-  // Fetch issues
+  // Poll for comment shapes on the canvas
   useEffect(() => {
-    if (!token || !repoFullName) return
+    function refresh(): void {
+      const editor = editorRef.current
+      if (!editor) return
 
-    async function fetchIssues(): Promise<void> {
-      try {
-        const result = await window.api.comments.listIssues(token!, repoFullName!)
-        setIssues(result)
-      } catch (err) {
-        console.error('Failed to fetch issues:', err)
-      }
+      const shapes = editor
+        .getCurrentPageShapes()
+        .filter((s): s is CommentShape => s.type === COMMENT_SHAPE_TYPE)
+
+      setComments(
+        shapes.map((s) => ({
+          shapeId: s.id,
+          text: s.props.text,
+          author: s.props.author,
+          resolved: s.props.resolved
+        }))
+      )
     }
 
-    fetchIssues()
-    const interval = setInterval(fetchIssues, 30000)
+    refresh()
+    const interval = setInterval(refresh, 500)
     return () => clearInterval(interval)
-  }, [token, repoFullName])
+  }, [editorRef])
 
-  // Fetch comments when issue is selected
-  useEffect(() => {
-    if (!token || !repoFullName || !selectedIssue) return
+  const filtered = useMemo(() => {
+    if (filter === 'all') return comments
+    if (filter === 'open') return comments.filter((c) => !c.resolved)
+    return comments.filter((c) => c.resolved)
+  }, [comments, filter])
 
-    async function fetchComments(): Promise<void> {
-      try {
-        const result = await window.api.comments.getIssueComments(
-          token!,
-          repoFullName!,
-          selectedIssue!.number
-        )
-        setComments(result)
-      } catch (err) {
-        console.error('Failed to fetch comments:', err)
+  const counts = useMemo(() => {
+    const open = comments.filter((c) => !c.resolved).length
+    const closed = comments.filter((c) => c.resolved).length
+    return { open, closed, all: comments.length }
+  }, [comments])
+
+  const handleClick = useCallback(
+    (shapeId: string) => {
+      const editor = editorRef.current
+      if (!editor) return
+      editor.select(shapeId as any)
+      const shape = editor.getShape(shapeId as any)
+      if (shape) {
+        const bounds = editor.getShapePageBounds(shape)
+        if (bounds) {
+          editor.centerOnPoint(
+            { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 },
+            { animation: { duration: 300 } }
+          )
+        }
       }
-    }
+    },
+    [editorRef]
+  )
 
-    fetchComments()
-  }, [token, repoFullName, selectedIssue])
+  const toggleResolved = useCallback(
+    (shapeId: string, currentResolved: boolean) => {
+      const editor = editorRef.current
+      if (!editor) return
+      editor.updateShape({
+        id: shapeId as any,
+        type: COMMENT_SHAPE_TYPE,
+        props: { resolved: !currentResolved }
+      })
+    },
+    [editorRef]
+  )
 
-  const handleCreateComment = useCallback(async () => {
-    if (!token || !repoFullName || !newComment.trim()) return
-
-    setLoading(true)
-    try {
-      if (selectedIssue) {
-        await window.api.comments.addComment(
-          token,
-          repoFullName,
-          selectedIssue.number,
-          newComment.trim()
-        )
-        const result = await window.api.comments.getIssueComments(
-          token,
-          repoFullName,
-          selectedIssue.number
-        )
-        setComments(result)
-      } else {
-        const title = `Comment on ${boardId}`
-        await window.api.comments.createIssue(token, repoFullName, title, newComment.trim())
-        const result = await window.api.comments.listIssues(token, repoFullName)
-        setIssues(result)
-      }
-      setNewComment('')
-    } catch (err) {
-      console.error('Failed to create comment:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [token, repoFullName, newComment, selectedIssue, boardId])
-
-  if (!token || !user) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.empty}>Connect GitHub in Settings to use comments.</div>
-      </div>
-    )
-  }
-
-  if (!repoFullName) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.empty}>Set up GitHub Sync to enable comments.</div>
-      </div>
-    )
-  }
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  }
-
-  const renderBody = (body: string) => {
-    const { html } = renderMarkdown(body)
+  const renderBody = (text: string): string => {
+    if (!text) return ''
+    const { html } = renderMarkdown(text)
     return html
   }
 
   return (
     <div style={styles.container}>
-      {/* Mini header for back nav when inside a thread */}
-      {selectedIssue && (
-        <div style={styles.header}>
+      {/* Filter bar */}
+      <div style={styles.filterBar}>
+        {(['open', 'closed', 'all'] as FilterMode[]).map((mode) => (
           <button
-            style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: 12 }}
-            onClick={() => {
-              setSelectedIssue(null)
-              setComments([])
+            key={mode}
+            style={{
+              ...styles.filterBtn,
+              background: filter === mode ? 'rgba(79, 143, 247, 0.15)' : 'transparent',
+              color: filter === mode ? '#4f8ff7' : '#666'
             }}
+            onClick={() => setFilter(mode)}
           >
-            &#8592; All threads
+            {mode === 'open' ? `Open (${counts.open})` : mode === 'closed' ? `Closed (${counts.closed})` : `All (${counts.all})`}
           </button>
-          <span style={{ fontSize: 10, color: '#666' }}>
-            {comments.length} replies
-          </span>
-        </div>
-      )}
+        ))}
+      </div>
 
+      {/* Comment list */}
       <div style={styles.list}>
-        {!selectedIssue && issues.length === 0 && (
+        {filtered.length === 0 && (
           <div style={styles.empty}>
-            No comments yet. Start a discussion.
+            {comments.length === 0
+              ? 'No comments on this board. Click "+ Comment" to add one.'
+              : filter === 'open'
+                ? 'No open comments.'
+                : 'No closed comments.'}
           </div>
         )}
 
-        {/* Issue list */}
-        {!selectedIssue &&
-          issues.map((issue) => (
+        {filtered.map((c) => (
+          <div
+            key={c.shapeId}
+            style={styles.comment}
+            onClick={() => handleClick(c.shapeId)}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <div style={styles.commentHeader}>
+              <span
+                style={{
+                  ...styles.author,
+                  textDecoration: c.resolved ? 'line-through' : 'none',
+                  color: c.resolved ? '#777' : '#ccc'
+                }}
+              >
+                {c.author}
+              </span>
+              <span
+                style={{
+                  ...styles.statusBadge,
+                  background: c.resolved ? 'rgba(74, 170, 74, 0.15)' : 'rgba(201, 168, 76, 0.15)',
+                  color: c.resolved ? '#4a4' : '#c9a84c'
+                }}
+              >
+                {c.resolved ? 'Resolved' : 'Open'}
+              </span>
+            </div>
+
             <div
-              key={issue.number}
-              style={{ ...styles.comment, cursor: 'pointer' }}
-              onClick={() => setSelectedIssue(issue)}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <div style={styles.commentHeader}>
-                <img src={issue.user.avatar_url} style={styles.avatar} />
-                <span style={styles.author}>{issue.user.login}</span>
-                <span style={styles.date}>{formatDate(issue.created_at)}</span>
-              </div>
-              <div
-                className="markdown-preview"
-                style={styles.commentBody}
-                dangerouslySetInnerHTML={{ __html: renderBody(issue.body?.slice(0, 150) || '') }}
-              />
-              {issue.comments > 0 && (
-                <span style={{ fontSize: 10, color: '#666', marginTop: 2, display: 'block' }}>
-                  {issue.comments} replies
-                </span>
-              )}
+              className="markdown-preview"
+              style={{
+                ...styles.commentBody,
+                color: c.resolved ? '#777' : '#bbb'
+              }}
+              dangerouslySetInnerHTML={{
+                __html: renderBody(c.text.slice(0, 200)) || '<em style="color:#555">Empty comment</em>'
+              }}
+            />
+
+            <div style={styles.actions}>
+              <button
+                style={styles.actionBtn}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleResolved(c.shapeId, c.resolved)
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#666')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#333')}
+              >
+                {c.resolved ? 'Reopen' : 'Resolve'}
+              </button>
+              <button
+                style={styles.actionBtn}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleClick(c.shapeId)
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#666')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#333')}
+              >
+                Go to
+              </button>
             </div>
-          ))}
-
-        {/* Issue detail */}
-        {selectedIssue && (
-          <>
-            <div style={styles.comment}>
-              <div style={styles.commentHeader}>
-                <img src={selectedIssue.user.avatar_url} style={styles.avatar} />
-                <span style={styles.author}>{selectedIssue.user.login}</span>
-                <span style={styles.date}>{formatDate(selectedIssue.created_at)}</span>
-              </div>
-              <div
-                className="markdown-preview"
-                style={styles.commentBody}
-                dangerouslySetInnerHTML={{ __html: renderBody(selectedIssue.body || '') }}
-              />
-            </div>
-
-            {comments.map((c) => (
-              <div key={c.id} style={styles.comment}>
-                <div style={styles.commentHeader}>
-                  <img src={c.user.avatar_url} style={styles.avatar} />
-                  <span style={styles.author}>{c.user.login}</span>
-                  <span style={styles.date}>{formatDate(c.created_at)}</span>
-                </div>
-                <div
-                  className="markdown-preview"
-                  style={styles.commentBody}
-                  dangerouslySetInnerHTML={{ __html: renderBody(c.body || '') }}
-                />
-              </div>
-            ))}
-          </>
-        )}
-      </div>
-
-      {/* Input area */}
-      <div style={styles.inputArea}>
-        <textarea
-          style={styles.textarea}
-          placeholder={
-            selectedIssue
-              ? 'Reply... (use @username to mention)'
-              : 'New discussion... (use @username to mention)'
-          }
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && e.metaKey) handleCreateComment()
-          }}
-        />
-        <button
-          style={{ ...styles.sendBtn, opacity: newComment.trim() && !loading ? 1 : 0.5 }}
-          onClick={handleCreateComment}
-          disabled={!newComment.trim() || loading}
-        >
-          {loading ? 'Sending...' : selectedIssue ? 'Reply' : 'Post'}
-        </button>
+          </div>
+        ))}
       </div>
     </div>
   )

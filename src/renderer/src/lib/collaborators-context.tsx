@@ -6,10 +6,22 @@ export interface CollaboratorInfo {
   avatar_url?: string
 }
 
-const CollaboratorsContext = createContext<CollaboratorInfo[]>([])
+interface CollaboratorsContextValue {
+  collaborators: CollaboratorInfo[]
+  repoFullName: string | null
+}
+
+const CollaboratorsContext = createContext<CollaboratorsContextValue>({
+  collaborators: [],
+  repoFullName: null
+})
 
 export function useCollaborators(): CollaboratorInfo[] {
-  return useContext(CollaboratorsContext)
+  return useContext(CollaboratorsContext).collaborators
+}
+
+export function useRepoFullName(): string | null {
+  return useContext(CollaboratorsContext).repoFullName
 }
 
 interface Props {
@@ -20,6 +32,7 @@ interface Props {
 export function CollaboratorsProvider({ workspacePath, children }: Props): JSX.Element {
   const { token } = useGitHubStore()
   const [collaborators, setCollaborators] = useState<CollaboratorInfo[]>([])
+  const [repoFullName, setRepoFullName] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token || !workspacePath) return
@@ -30,8 +43,9 @@ export function CollaboratorsProvider({ workspacePath, children }: Props): JSX.E
         if (!remote) return
         const match = remote.match(/github\.com[:/](.+?)(?:\.git)?$/)
         if (!match) return
-        const repoFullName = match[1]
-        const collabs = await window.api.sharing.listCollaborators(token!, repoFullName)
+        const repo = match[1]
+        setRepoFullName(repo)
+        const collabs = await window.api.sharing.listCollaborators(token!, repo)
         setCollaborators(
           collabs.map((c: { login: string; avatar_url?: string }) => ({
             login: c.login,
@@ -44,13 +58,12 @@ export function CollaboratorsProvider({ workspacePath, children }: Props): JSX.E
     }
 
     fetchCollabs()
-    // Refresh every 60 seconds
     const interval = setInterval(fetchCollabs, 60000)
     return () => clearInterval(interval)
   }, [token, workspacePath])
 
   return (
-    <CollaboratorsContext.Provider value={collaborators}>
+    <CollaboratorsContext.Provider value={{ collaborators, repoFullName }}>
       {children}
     </CollaboratorsContext.Provider>
   )

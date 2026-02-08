@@ -17,8 +17,9 @@ import MarkdownEditor from '../editor/MarkdownEditor'
 import { wikilinkCompletionSource } from '../editor/WikilinkPlugin'
 import { mentionCompletionSource } from '../editor/MentionPlugin'
 import { resolveWikilink, parseWikilinks, type NotebookInfo } from '../../lib/wikilinks'
-import { useCollaborators } from '../../lib/collaborators-context'
-import { useCallback, useMemo } from 'react'
+import { useCollaborators, useRepoFullName } from '../../lib/collaborators-context'
+import { notifyMentions } from '../../lib/mentions'
+import { useCallback, useMemo, useRef } from 'react'
 
 // --- Shape type registration ---
 
@@ -121,6 +122,7 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
 
   // Mention autocomplete: read collaborators from context (set at Board level)
   const collaborators = useCollaborators()
+  const repoFullName = useRepoFullName()
   const getCollaborators = useCallback(() => collaborators, [collaborators])
 
   // Single combined autocompletion extension with both wikilink and mention sources
@@ -133,6 +135,10 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
     })
   }, [getNotebooks, getCollaborators])
 
+  // Track previous text for mention diff
+  const prevTextRef = useRef(shape.props.markdown)
+  const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const handleChange = useCallback(
     (value: string) => {
       editor.updateShape<MarkdownNotebookShape>({
@@ -143,8 +149,16 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
           title: extractTitle(value)
         }
       })
+
+      // Debounced mention notification (wait 3s after last edit)
+      if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current)
+      notifyTimerRef.current = setTimeout(() => {
+        const prev = prevTextRef.current
+        prevTextRef.current = value
+        notifyMentions(value, prev, `notebook: ${extractTitle(value)}`, repoFullName)
+      }, 3000)
     },
-    [editor, shape.id]
+    [editor, shape.id, repoFullName]
   )
 
   // Handle wikilink click in preview mode (use pointerdown to avoid tldraw intercepting clicks)

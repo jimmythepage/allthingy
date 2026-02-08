@@ -327,11 +327,7 @@ export default function NotebookSidebar({
       {/* Comments tab */}
       {activeTab === 'comments' && (
         <div style={styles.tabContent}>
-          <CommentsPanel
-            workspacePath={workspacePath}
-            boardId={boardId}
-            repoFullName={repoFullName}
-          />
+          <CommentsPanel editorRef={editorRef} />
         </div>
       )}
 
