@@ -134,9 +134,9 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
     [editor, shape.id]
   )
 
-  // Handle wikilink click in preview mode
-  const handlePreviewClick = useCallback(
-    (e: React.MouseEvent) => {
+  // Handle wikilink click in preview mode (use pointerdown to avoid tldraw intercepting clicks)
+  const handleWikilinkPointerDown = useCallback(
+    (e: React.PointerEvent) => {
       const target = (e.target as HTMLElement).closest('.wikilink') as HTMLElement | null
       if (!target) return
 
@@ -160,9 +160,18 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
 
       const resolved = resolveWikilink(wikilinkTarget, notebooks)
       if (resolved) {
-        // Navigate to the target shape: select it and zoom to it
+        // Navigate to the target shape: select it and center on it
         editor.select(resolved.shapeId as any)
-        editor.zoomToSelection({ animation: { duration: 300 } })
+        const targetShape = editor.getShape(resolved.shapeId as any)
+        if (targetShape) {
+          const bounds = editor.getShapePageBounds(targetShape)
+          if (bounds) {
+            editor.centerOnPoint(
+              { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 },
+              { animation: { duration: 300 } }
+            )
+          }
+        }
       }
     },
     [editor]
@@ -246,7 +255,7 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
               color: '#e0e0e0',
               wordWrap: 'break-word'
             }}
-            onClick={handlePreviewClick}
+            onPointerDown={handleWikilinkPointerDown}
             dangerouslySetInnerHTML={{ __html: rendered?.html || '' }}
           />
         )}
