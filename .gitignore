@@ -2,6 +2,7 @@ node_modules/
 out/
 dist/
 release/
+resources/icon-512.png
 .DS_Store
 *.log
 .env
