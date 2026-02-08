@@ -18,6 +18,7 @@ import { renderMarkdown } from '../../lib/markdown'
 import { notifyMentions, updateLinkedIssues } from '../../lib/mentions'
 import MarkdownEditor from '../editor/MarkdownEditor'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
+import ConnectionHandles from './ConnectionHandles'
 
 // --- Shape type registration ---
 
@@ -305,6 +306,7 @@ function CommentComponent({ shape }: { shape: CommentShape }): JSX.Element {
           </div>
         )}
       </div>
+      <ConnectionHandles shapeId={shape.id} width={shape.props.w} height={shape.props.h} />
     </HTMLContainer>
   )
 }

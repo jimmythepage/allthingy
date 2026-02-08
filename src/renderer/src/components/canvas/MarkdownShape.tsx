@@ -20,6 +20,7 @@ import { resolveWikilink, parseWikilinks, type NotebookInfo } from '../../lib/wi
 import { useCollaborators, useRepoFullName } from '../../lib/collaborators-context'
 import { notifyMentions } from '../../lib/mentions'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
+import ConnectionHandles from './ConnectionHandles'
 
 // --- Shape type registration ---
 
@@ -300,6 +301,7 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
           />
         )}
       </div>
+      <ConnectionHandles shapeId={shape.id} width={shape.props.w} height={shape.props.h} />
     </HTMLContainer>
   )
 }
