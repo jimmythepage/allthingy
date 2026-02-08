@@ -57,6 +57,24 @@ function migrateSnapshot(snapshot: unknown): unknown {
   return snapshot
 }
 
+/**
+ * Inject saved preferences (grid mode, color scheme) into the snapshot's
+ * session data BEFORE loading, so tldraw initializes with the correct values.
+ * This avoids all race conditions with post-mount preference application.
+ */
+function injectPrefsIntoSnapshot(snapshot: unknown): unknown {
+  try {
+    const prefs = useEditorPrefsStore.getState()
+    const s = snapshot as { session?: { isGridMode?: boolean } }
+    if (s?.session) {
+      s.session.isGridMode = prefs.isGridMode
+    }
+  } catch {
+    // If injection fails, just use snapshot as-is
+  }
+  return snapshot
+}
+
 const customShapeUtils = [MarkdownNotebookUtil, CommentShapeUtil]
 const customTools = [MarkdownNotebookTool, CommentTool]
 
@@ -170,6 +188,7 @@ export default function Board(): JSX.Element {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isLoadingSnapshot = useRef(false)
+  const isInitializingPrefs = useRef(true)
   const workspacePathRef = useRef(workspacePath)
   workspacePathRef.current = workspacePath
   const boardIdRef = useRef(boardId)
@@ -309,12 +328,13 @@ export default function Board(): JSX.Element {
       editorRef.current = mountedEditor
       setEditorReady((n) => n + 1)
 
-      // Load existing snapshot if available (BEFORE applying prefs)
+      // Load existing snapshot if available, with prefs injected BEFORE loading
       if (initialSnapshot) {
         isLoadingSnapshot.current = true
         try {
-          // Migrate old shape data to current schema before loading
-          const snapshot = migrateSnapshot(initialSnapshot)
+          // Migrate old shape data, then inject saved preferences into session
+          let snapshot = migrateSnapshot(initialSnapshot)
+          snapshot = injectPrefsIntoSnapshot(snapshot)
           loadSnapshot(mountedEditor.store, snapshot as Parameters<typeof loadSnapshot>[1])
         } catch (err) {
           console.error('Failed to load snapshot into editor:', err)
@@ -322,22 +342,24 @@ export default function Board(): JSX.Element {
         isLoadingSnapshot.current = false
       }
 
-      // Apply persisted editor preferences AFTER snapshot load, deferred to next frame
-      requestAnimationFrame(() => {
+      // Apply color scheme from localStorage (not stored in snapshot session)
+      // and ensure grid mode is set even if there was no snapshot
+      isInitializingPrefs.current = true
+      const applyPrefsTimer = setTimeout(() => {
         try {
           const prefs = useEditorPrefsStore.getState()
           mountedEditor.user.updateUserPreferences({
             colorScheme: prefs.colorScheme
           })
+          // Also force-set grid mode in case snapshot didn't have session data
           mountedEditor.updateInstanceState({
             isGridMode: prefs.isGridMode
           })
-        } catch {
-          // If editor isn't ready, just use defaults
-        }
-      })
+        } catch { /* ignore */ }
+        isInitializingPrefs.current = false
+      }, 100)
 
-      // Listen for changes to auto-save
+      // Listen for document changes to auto-save
       const unsubscribeDoc = mountedEditor.store.listen(
         (_info: TLStoreEventInfo) => {
           scheduleSave()
@@ -345,33 +367,32 @@ export default function Board(): JSX.Element {
         { scope: 'document', source: 'user' }
       )
 
-      // Periodically persist user preferences (grid mode, color scheme)
-      // Using a timer avoids interfering with tldraw's reactive system
-      const prefsInterval = setInterval(() => {
-        try {
-          const userPrefs = mountedEditor.user.getUserPreferences()
-          const instanceState = mountedEditor.getInstanceState()
-          useEditorPrefsStore.getState().update({
-            colorScheme: userPrefs.colorScheme as 'dark' | 'light' | 'system',
-            isGridMode: instanceState.isGridMode
-          })
-        } catch {
-          // Editor not ready yet
-        }
-      }, 2000)
+      // Listen for session/instance changes (grid mode, color scheme, etc.)
+      // Save prefs immediately when they change — but NOT during initialization
+      const unsubscribeSession = mountedEditor.store.listen(
+        (_info: TLStoreEventInfo) => {
+          if (isLoadingSnapshot.current || isInitializingPrefs.current) return
+          try {
+            const userPrefs = mountedEditor.user.getUserPreferences()
+            const instanceState = mountedEditor.getInstanceState()
+            useEditorPrefsStore.getState().update({
+              colorScheme: userPrefs.colorScheme as 'dark' | 'light' | 'system',
+              isGridMode: instanceState.isGridMode
+            })
+          } catch { /* ignore */ }
+          // Also trigger a board save so the snapshot on disk is up to date
+          scheduleSave()
+        },
+        { scope: 'session' }
+      )
 
       return () => {
+        clearTimeout(applyPrefsTimer)
         unsubscribeDoc()
-        clearInterval(prefsInterval)
-        // Save prefs one last time on unmount
-        try {
-          const userPrefs = mountedEditor.user.getUserPreferences()
-          const instanceState = mountedEditor.getInstanceState()
-          useEditorPrefsStore.getState().update({
-            colorScheme: userPrefs.colorScheme as 'dark' | 'light' | 'system',
-            isGridMode: instanceState.isGridMode
-          })
-        } catch { /* ignore */ }
+        unsubscribeSession()
+        // Do NOT save prefs here — tldraw resets state during unmount,
+        // which would overwrite the correct values already saved by the
+        // session listener. Just save the board document.
         saveBoard()
       }
     },
