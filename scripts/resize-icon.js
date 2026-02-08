@@ -1,7 +1,7 @@
 /**
  * Resize resources/icon.png to 512x512 and write resources/icon-512.png.
  * electron-builder requires at least 512x512 for app icons.
- * Run before dist:mac / dist:win (or CI does it).
+ * Uses Jimp (pure JS, no native bindings) so it runs on any CI.
  */
 const path = require('path')
 const fs = require('fs')
@@ -16,11 +16,10 @@ if (!fs.existsSync(inputPath)) {
 
 ;(async () => {
   try {
-    const sharp = require('sharp')
-    await sharp(inputPath)
-      .resize(512, 512)
-      .png()
-      .toFile(outputPath)
+    const { Jimp } = require('jimp')
+    const image = await Jimp.read(inputPath)
+    image.resize({ w: 512, h: 512 })
+    await image.write(outputPath)
     console.log('Created resources/icon-512.png (512x512)')
   } catch (err) {
     console.error('Resize failed:', err.message)
