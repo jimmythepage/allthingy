@@ -77,6 +77,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Deduplicate asset names
+        run: |
+          [ -f release-mac/builder-debug.yml ] && mv release-mac/builder-debug.yml release-mac/builder-debug-mac.yml || true
+          [ -f release-win/builder-debug.yml ] && mv release-win/builder-debug.yml release-win/builder-debug-win.yml || true
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
