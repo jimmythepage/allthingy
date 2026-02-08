@@ -19,7 +19,7 @@ import { mentionCompletionSource } from '../editor/MentionPlugin'
 import { resolveWikilink, parseWikilinks, type NotebookInfo } from '../../lib/wikilinks'
 import { useCollaborators, useRepoFullName } from '../../lib/collaborators-context'
 import { notifyMentions } from '../../lib/mentions'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 // --- Shape type registration ---
 
@@ -135,9 +135,9 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
     })
   }, [getNotebooks, getCollaborators])
 
-  // Track previous text for mention diff
-  const prevTextRef = useRef(shape.props.markdown)
-  const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Track the text snapshot from when editing started
+  const textOnEditStartRef = useRef(shape.props.markdown)
+  const wasEditingRef = useRef(false)
 
   const handleChange = useCallback(
     (value: string) => {
@@ -149,17 +149,31 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
           title: extractTitle(value)
         }
       })
-
-      // Debounced mention notification (wait 3s after last edit)
-      if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current)
-      notifyTimerRef.current = setTimeout(() => {
-        const prev = prevTextRef.current
-        prevTextRef.current = value
-        notifyMentions(value, prev, `notebook: ${extractTitle(value)}`, repoFullName)
-      }, 3000)
     },
-    [editor, shape.id, repoFullName]
+    [editor, shape.id]
   )
+
+  // When user finishes editing (isEditing goes from true → false),
+  // check for new @mentions and create GitHub issue notifications
+  useEffect(() => {
+    if (isEditing) {
+      textOnEditStartRef.current = shape.props.markdown
+      wasEditingRef.current = true
+    } else if (wasEditingRef.current) {
+      wasEditingRef.current = false
+      const prevText = textOnEditStartRef.current
+      const currentText = shape.props.markdown
+
+      if (prevText !== currentText) {
+        notifyMentions(
+          currentText,
+          prevText,
+          `notebook: ${extractTitle(currentText)}`,
+          repoFullName
+        )
+      }
+    }
+  }, [isEditing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle wikilink click in preview mode (use pointerdown to avoid tldraw intercepting clicks)
   const handleWikilinkPointerDown = useCallback(

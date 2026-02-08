@@ -17,7 +17,7 @@ import { useCollaborators, useRepoFullName } from '../../lib/collaborators-conte
 import { renderMarkdown } from '../../lib/markdown'
 import { notifyMentions, updateLinkedIssues } from '../../lib/mentions'
 import MarkdownEditor from '../editor/MarkdownEditor'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 // --- Shape type registration ---
 
@@ -127,9 +127,9 @@ function CommentComponent({ shape }: { shape: CommentShape }): JSX.Element {
     })
   }, [getCollaborators])
 
-  // Track previous text for mention diff
-  const prevTextRef = useRef(shape.props.text)
-  const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Track the text snapshot from when editing started
+  const textOnEditStartRef = useRef(shape.props.text)
+  const wasEditingRef = useRef(false)
 
   const handleChange = useCallback(
     (value: string) => {
@@ -138,32 +138,44 @@ function CommentComponent({ shape }: { shape: CommentShape }): JSX.Element {
         type: COMMENT_SHAPE_TYPE,
         props: { text: value }
       })
-
-      // Debounced mention notification (wait 3s after last edit)
-      if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current)
-      notifyTimerRef.current = setTimeout(async () => {
-        const prev = prevTextRef.current
-        prevTextRef.current = value
-        const newIssueNumbers = await notifyMentions(
-          value,
-          prev,
-          `board comment by ${shape.props.author}`,
-          repoFullName
-        )
-        // Store newly created issue numbers on the shape
-        if (newIssueNumbers.length > 0) {
-          const existing = parseIssueNumbers(shape.props.linkedIssueNumbers)
-          const merged = [...existing, ...newIssueNumbers]
-          editor.updateShape<CommentShape>({
-            id: shape.id,
-            type: COMMENT_SHAPE_TYPE,
-            props: { linkedIssueNumbers: serializeIssueNumbers(merged) }
-          })
-        }
-      }, 3000)
     },
-    [editor, shape.id, shape.props.author, shape.props.linkedIssueNumbers, repoFullName]
+    [editor, shape.id]
   )
+
+  // When user finishes editing (isEditing goes from true → false),
+  // check for new @mentions and create GitHub issue notifications
+  useEffect(() => {
+    if (isEditing) {
+      // Entering edit mode — snapshot the current text
+      textOnEditStartRef.current = shape.props.text
+      wasEditingRef.current = true
+    } else if (wasEditingRef.current) {
+      // Just exited edit mode — diff and notify
+      wasEditingRef.current = false
+      const prevText = textOnEditStartRef.current
+      const currentText = shape.props.text
+
+      if (prevText !== currentText) {
+        ;(async () => {
+          const newIssueNumbers = await notifyMentions(
+            currentText,
+            prevText,
+            `board comment by ${shape.props.author}`,
+            repoFullName
+          )
+          if (newIssueNumbers.length > 0) {
+            const existing = parseIssueNumbers(shape.props.linkedIssueNumbers)
+            const merged = [...existing, ...newIssueNumbers]
+            editor.updateShape<CommentShape>({
+              id: shape.id,
+              type: COMMENT_SHAPE_TYPE,
+              props: { linkedIssueNumbers: serializeIssueNumbers(merged) }
+            })
+          }
+        })()
+      }
+    }
+  }, [isEditing]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleResolved = useCallback(
     (e: React.PointerEvent) => {
