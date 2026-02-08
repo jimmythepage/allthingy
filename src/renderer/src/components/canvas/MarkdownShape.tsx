@@ -17,7 +17,9 @@ import MarkdownEditor from '../editor/MarkdownEditor'
 import { wikilinkCompletionSource } from '../editor/WikilinkPlugin'
 import { mentionCompletionSource } from '../editor/MentionPlugin'
 import { resolveWikilink, parseWikilinks, type NotebookInfo } from '../../lib/wikilinks'
+import { useNavigate } from 'react-router-dom'
 import { useCollaborators, useRepoFullName } from '../../lib/collaborators-context'
+import { useBoardRoute } from '../../lib/board-route-context'
 import { notifyMentions } from '../../lib/mentions'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import ConnectionHandles from './ConnectionHandles'
@@ -101,6 +103,8 @@ export class MarkdownNotebookUtil extends ShapeUtil<MarkdownNotebookShape> {
 function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }): JSX.Element {
   const isEditing = useIsEditing(shape.id)
   const editor = useEditor()
+  const navigate = useNavigate()
+  const boardRoute = useBoardRoute()
 
   const rendered = useMemo(() => {
     if (isEditing) return null
@@ -267,6 +271,28 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
             }}
           >
             {linkCount} link{linkCount > 1 ? 's' : ''}
+          </span>
+        )}
+        {boardRoute && shape.props.notebookId && !isEditing && (
+          <span
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              navigate(
+                `/read/${encodeURIComponent(boardRoute.workspacePath)}/${boardRoute.boardId}/${shape.props.notebookId}`
+              )
+            }}
+            style={{
+              cursor: 'pointer',
+              fontSize: 11,
+              color: 'var(--accent)',
+              padding: '2px 6px',
+              borderRadius: 4,
+              background: 'rgba(79, 143, 247, 0.15)'
+            }}
+            title="Open in read mode"
+          >
+            Read
           </span>
         )}
       </div>

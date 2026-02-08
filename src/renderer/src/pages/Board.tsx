@@ -24,6 +24,7 @@ import NotebookSidebar from '../components/sidebar/NotebookSidebar'
 import SyncStatus from '../components/github/SyncStatus'
 import SearchPalette from '../components/sidebar/SearchPalette'
 import { CollaboratorsProvider } from '../lib/collaborators-context'
+import { BoardRouteProvider } from '../lib/board-route-context'
 import { useEditorPrefsStore } from '../stores/editor-prefs'
 import { useGitHubStore } from '../stores/github'
 
@@ -498,6 +499,7 @@ export default function Board(): JSX.Element {
 
   return (
     <CollaboratorsProvider workspacePath={workspacePath}>
+    <BoardRouteProvider workspacePath={workspacePath} boardId={boardId || ''}>
     <div style={styles.container}>
       <div style={styles.titlebar} className="titlebar-drag">
         <button
@@ -594,6 +596,7 @@ export default function Board(): JSX.Element {
         <SearchPalette editor={editorRef.current} onClose={() => setShowSearch(false)} />
       )}
     </div>
+    </BoardRouteProvider>
     </CollaboratorsProvider>
   )
 }

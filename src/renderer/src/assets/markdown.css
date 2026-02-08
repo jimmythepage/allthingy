@@ -123,3 +123,21 @@
   border-radius: 3px;
   font-weight: 500;
 }
+
+/* Full-screen read mode (Notion-like) */
+.read-mode-prose {
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.read-mode-prose h1 { font-size: 1.85em; margin-top: 1.2em; }
+.read-mode-prose h2 { font-size: 1.5em; margin-top: 1.4em; }
+.read-mode-prose h3 { font-size: 1.25em; margin-top: 1em; }
+
+.read-mode-prose p {
+  margin-bottom: 0.85em;
+}
+
+.read-mode-prose a.wikilink {
+  cursor: pointer;
+}
