@@ -90,3 +90,12 @@ input {
 input:focus {
   border-color: var(--accent);
 }
+
+/* Hide tldraw license watermark (local-only app, not for production distribution) */
+.tl-watermark_SEE-LICENSE,
+[class*="watermark"] {
+  display: none !important;
+}
+.tl-container {
+  --tl-layer-watermark: -1;
+}
