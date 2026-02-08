@@ -25,6 +25,7 @@ import SyncStatus from '../components/github/SyncStatus'
 import SearchPalette from '../components/sidebar/SearchPalette'
 import { CollaboratorsProvider } from '../lib/collaborators-context'
 import { useEditorPrefsStore } from '../stores/editor-prefs'
+import { useGitHubStore } from '../stores/github'
 
 const AUTOSAVE_DELAY = 2000
 
@@ -167,6 +168,7 @@ export default function Board(): JSX.Element {
   // Use a ref that is always current — never stale in closures
   const editorRef = useRef<Editor | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isLoadingSnapshot = useRef(false)
   const workspacePathRef = useRef(workspacePath)
   workspacePathRef.current = workspacePath
@@ -205,6 +207,26 @@ export default function Board(): JSX.Element {
       cancelled = true
     }
   }, [workspacePath, boardId])
+
+  // Auto-sync: commit + push to GitHub silently in the background
+  const autoSync = useCallback(async (wsPath: string) => {
+    const { token } = useGitHubStore.getState()
+    if (!token) return
+
+    try {
+      const remote = await window.api.git.getRemote(wsPath)
+      if (!remote) return
+
+      const status = await window.api.git.status(wsPath)
+      if (status && !status.isClean) {
+        await window.api.git.commit(wsPath, `auto-save ${new Date().toISOString()}`)
+      }
+
+      await window.api.git.push(wsPath, token)
+    } catch (err) {
+      console.warn('[bbboard] Auto-sync failed:', err)
+    }
+  }, [])
 
   // Save function — uses refs to always have current values
   const saveBoard = useCallback(async () => {
@@ -253,6 +275,13 @@ export default function Board(): JSX.Element {
       }
 
       setSaveStatus('saved')
+
+      // Schedule auto-sync to GitHub (debounced — waits 10s after last save)
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
+      // Auto-sync to GitHub 10s after last save
+      syncTimerRef.current = setTimeout(() => {
+        autoSync(wsPath)
+      }, 10000)
     } catch (err) {
       console.error('Failed to save board:', err)
       setSaveStatus('unsaved')
@@ -267,10 +296,11 @@ export default function Board(): JSX.Element {
     saveTimerRef.current = setTimeout(saveBoard, AUTOSAVE_DELAY)
   }, [saveBoard])
 
-  // Cleanup timer on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
     }
   }, [])
 
