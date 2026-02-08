@@ -11,10 +11,11 @@ import {
   useIsEditing,
   useEditor
 } from 'tldraw'
+import { autocompletion } from '@codemirror/autocomplete'
 import { renderMarkdown } from '../../lib/markdown'
 import MarkdownEditor from '../editor/MarkdownEditor'
-import { wikilinkAutocomplete } from '../editor/WikilinkPlugin'
-import { mentionAutocomplete } from '../editor/MentionPlugin'
+import { wikilinkCompletionSource } from '../editor/WikilinkPlugin'
+import { mentionCompletionSource } from '../editor/MentionPlugin'
 import { resolveWikilink, parseWikilinks, type NotebookInfo } from '../../lib/wikilinks'
 import { useCollaborators } from '../../lib/collaborators-context'
 import { useCallback, useMemo } from 'react'
@@ -118,16 +119,19 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
       }))
   }, [editor, shape.id])
 
-  const wikilinkExt = useMemo(() => {
-    return wikilinkAutocomplete(getNotebooks)
-  }, [getNotebooks])
-
   // Mention autocomplete: read collaborators from context (set at Board level)
   const collaborators = useCollaborators()
   const getCollaborators = useCallback(() => collaborators, [collaborators])
-  const mentionExt = useMemo(() => {
-    return mentionAutocomplete(getCollaborators)
-  }, [getCollaborators])
+
+  // Single combined autocompletion extension with both wikilink and mention sources
+  const autocompleteExt = useMemo(() => {
+    return autocompletion({
+      override: [
+        wikilinkCompletionSource(getNotebooks),
+        mentionCompletionSource(getCollaborators)
+      ]
+    })
+  }, [getNotebooks, getCollaborators])
 
   const handleChange = useCallback(
     (value: string) => {
@@ -251,7 +255,7 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
             initialValue={shape.props.markdown}
             onChange={handleChange}
             autoFocus
-            extensions={[wikilinkExt, mentionExt]}
+            extensions={[autocompleteExt]}
           />
         ) : (
           <div
