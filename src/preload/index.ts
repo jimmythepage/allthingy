@@ -88,7 +88,14 @@ const api = {
     listIssues: (token: string, repoFullName: string) =>
       ipcRenderer.invoke('comments:list-issues', token, repoFullName),
     getIssueComments: (token: string, repoFullName: string, issueNumber: number) =>
-      ipcRenderer.invoke('comments:get-issue-comments', token, repoFullName, issueNumber)
+      ipcRenderer.invoke('comments:get-issue-comments', token, repoFullName, issueNumber),
+    updateIssueState: (
+      token: string,
+      repoFullName: string,
+      issueNumber: number,
+      state: 'open' | 'closed'
+    ) =>
+      ipcRenderer.invoke('comments:update-issue-state', token, repoFullName, issueNumber, state)
   }
 }
 

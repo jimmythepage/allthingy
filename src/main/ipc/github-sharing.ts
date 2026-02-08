@@ -188,6 +188,38 @@ export function registerSharingHandlers(): void {
     }
   )
 
+  // Close or reopen an issue
+  ipcMain.handle(
+    'comments:update-issue-state',
+    async (
+      _event,
+      token: string,
+      repoFullName: string,
+      issueNumber: number,
+      state: 'open' | 'closed'
+    ) => {
+      const response = await fetch(
+        `https://api.github.com/repos/${repoFullName}/issues/${issueNumber}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ state })
+        }
+      )
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.message || `Failed to update issue: ${response.status}`)
+      }
+
+      return await response.json()
+    }
+  )
+
   // Get repo info (to extract full_name from remote URL)
   ipcMain.handle(
     'sharing:get-repo-info',

@@ -28,6 +28,34 @@ import { useEditorPrefsStore } from '../stores/editor-prefs'
 
 const AUTOSAVE_DELAY = 2000
 
+/**
+ * Migrate snapshot data to match the current shape schemas.
+ * This handles loading boards saved with older versions of shape props.
+ */
+function migrateSnapshot(snapshot: unknown): unknown {
+  try {
+    const s = snapshot as { document?: { store?: Record<string, Record<string, unknown>> } }
+    if (!s?.document?.store) return snapshot
+
+    for (const [key, record] of Object.entries(s.document.store)) {
+      if (record.typeName === 'shape' && record.type === 'board-comment') {
+        const props = record.props as Record<string, unknown>
+        // Add linkedIssueNumbers if missing (added in schema v2)
+        if (props && !('linkedIssueNumbers' in props)) {
+          props.linkedIssueNumbers = '[]'
+        }
+        // Add resolved if missing
+        if (props && !('resolved' in props)) {
+          props.resolved = false
+        }
+      }
+    }
+  } catch {
+    // If migration fails, return original snapshot
+  }
+  return snapshot
+}
+
 const customShapeUtils = [MarkdownNotebookUtil, CommentShapeUtil]
 const customTools = [MarkdownNotebookTool, CommentTool]
 
@@ -251,25 +279,33 @@ export default function Board(): JSX.Element {
       editorRef.current = mountedEditor
       setEditorReady((n) => n + 1)
 
-      // Apply persisted editor preferences
-      const prefs = useEditorPrefsStore.getState()
-      mountedEditor.user.updateUserPreferences({
-        colorScheme: prefs.colorScheme
-      })
-      mountedEditor.updateInstanceState({
-        isGridMode: prefs.isGridMode
-      })
-
-      // Load existing snapshot if available
+      // Load existing snapshot if available (BEFORE applying prefs)
       if (initialSnapshot) {
         isLoadingSnapshot.current = true
         try {
-          loadSnapshot(mountedEditor.store, initialSnapshot as Parameters<typeof loadSnapshot>[1])
+          // Migrate old shape data to current schema before loading
+          const snapshot = migrateSnapshot(initialSnapshot)
+          loadSnapshot(mountedEditor.store, snapshot as Parameters<typeof loadSnapshot>[1])
         } catch (err) {
           console.error('Failed to load snapshot into editor:', err)
         }
         isLoadingSnapshot.current = false
       }
+
+      // Apply persisted editor preferences AFTER snapshot load, deferred to next frame
+      requestAnimationFrame(() => {
+        try {
+          const prefs = useEditorPrefsStore.getState()
+          mountedEditor.user.updateUserPreferences({
+            colorScheme: prefs.colorScheme
+          })
+          mountedEditor.updateInstanceState({
+            isGridMode: prefs.isGridMode
+          })
+        } catch {
+          // If editor isn't ready, just use defaults
+        }
+      })
 
       // Listen for changes to auto-save
       const unsubscribeDoc = mountedEditor.store.listen(
@@ -279,22 +315,33 @@ export default function Board(): JSX.Element {
         { scope: 'document', source: 'user' }
       )
 
-      // Listen for user preference changes and persist them
-      const unsubscribePrefs = mountedEditor.store.listen(
-        () => {
+      // Periodically persist user preferences (grid mode, color scheme)
+      // Using a timer avoids interfering with tldraw's reactive system
+      const prefsInterval = setInterval(() => {
+        try {
           const userPrefs = mountedEditor.user.getUserPreferences()
           const instanceState = mountedEditor.getInstanceState()
           useEditorPrefsStore.getState().update({
             colorScheme: userPrefs.colorScheme as 'dark' | 'light' | 'system',
             isGridMode: instanceState.isGridMode
           })
-        },
-        { scope: 'session' }
-      )
+        } catch {
+          // Editor not ready yet
+        }
+      }, 2000)
 
       return () => {
         unsubscribeDoc()
-        unsubscribePrefs()
+        clearInterval(prefsInterval)
+        // Save prefs one last time on unmount
+        try {
+          const userPrefs = mountedEditor.user.getUserPreferences()
+          const instanceState = mountedEditor.getInstanceState()
+          useEditorPrefsStore.getState().update({
+            colorScheme: userPrefs.colorScheme as 'dark' | 'light' | 'system',
+            isGridMode: instanceState.isGridMode
+          })
+        } catch { /* ignore */ }
         saveBoard()
       }
     },
@@ -343,7 +390,8 @@ export default function Board(): JSX.Element {
         h: 120,
         text: '',
         author: 'You',
-        resolved: false
+        resolved: false,
+        linkedIssueNumbers: '[]'
       }
     })
   }

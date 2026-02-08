@@ -15,7 +15,7 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { mentionCompletionSource } from '../editor/MentionPlugin'
 import { useCollaborators, useRepoFullName } from '../../lib/collaborators-context'
 import { renderMarkdown } from '../../lib/markdown'
-import { notifyMentions } from '../../lib/mentions'
+import { notifyMentions, updateLinkedIssues } from '../../lib/mentions'
 import MarkdownEditor from '../editor/MarkdownEditor'
 import { useCallback, useMemo, useRef } from 'react'
 
@@ -31,11 +31,26 @@ declare module 'tldraw' {
       text: string
       author: string
       resolved: boolean
+      linkedIssueNumbers: string
     }
   }
 }
 
 export type CommentShape = TLShape<typeof COMMENT_SHAPE_TYPE>
+
+// Helper to parse/serialize the issue numbers (stored as JSON string for tldraw compat)
+function parseIssueNumbers(s: string): number[] {
+  try {
+    const arr = JSON.parse(s || '[]')
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return []
+  }
+}
+
+function serializeIssueNumbers(nums: number[]): string {
+  return JSON.stringify(nums)
+}
 
 // --- Shape Util ---
 
@@ -47,7 +62,8 @@ export class CommentShapeUtil extends ShapeUtil<CommentShape> {
     h: T.number,
     text: T.string,
     author: T.string,
-    resolved: T.boolean
+    resolved: T.boolean,
+    linkedIssueNumbers: T.string
   }
 
   getDefaultProps(): CommentShape['props'] {
@@ -56,7 +72,8 @@ export class CommentShapeUtil extends ShapeUtil<CommentShape> {
       h: 120,
       text: '',
       author: 'You',
-      resolved: false
+      resolved: false,
+      linkedIssueNumbers: '[]'
     }
   }
 
@@ -124,26 +141,48 @@ function CommentComponent({ shape }: { shape: CommentShape }): JSX.Element {
 
       // Debounced mention notification (wait 3s after last edit)
       if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current)
-      notifyTimerRef.current = setTimeout(() => {
+      notifyTimerRef.current = setTimeout(async () => {
         const prev = prevTextRef.current
         prevTextRef.current = value
-        notifyMentions(value, prev, `board comment by ${shape.props.author}`, repoFullName)
+        const newIssueNumbers = await notifyMentions(
+          value,
+          prev,
+          `board comment by ${shape.props.author}`,
+          repoFullName
+        )
+        // Store newly created issue numbers on the shape
+        if (newIssueNumbers.length > 0) {
+          const existing = parseIssueNumbers(shape.props.linkedIssueNumbers)
+          const merged = [...existing, ...newIssueNumbers]
+          editor.updateShape<CommentShape>({
+            id: shape.id,
+            type: COMMENT_SHAPE_TYPE,
+            props: { linkedIssueNumbers: serializeIssueNumbers(merged) }
+          })
+        }
       }, 3000)
     },
-    [editor, shape.id, shape.props.author, repoFullName]
+    [editor, shape.id, shape.props.author, shape.props.linkedIssueNumbers, repoFullName]
   )
 
   const toggleResolved = useCallback(
     (e: React.PointerEvent) => {
       e.stopPropagation()
       e.preventDefault()
+      const newResolved = !resolved
       editor.updateShape<CommentShape>({
         id: shape.id,
         type: COMMENT_SHAPE_TYPE,
-        props: { resolved: !resolved }
+        props: { resolved: newResolved }
       })
+
+      // Close or reopen linked GitHub issues
+      const issueNums = parseIssueNumbers(shape.props.linkedIssueNumbers)
+      if (issueNums.length > 0) {
+        updateLinkedIssues(issueNums, newResolved ? 'closed' : 'open', repoFullName)
+      }
     },
-    [editor, shape.id, resolved]
+    [editor, shape.id, resolved, shape.props.linkedIssueNumbers, repoFullName]
   )
 
   const rendered = useMemo(() => {

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo, type RefObject } from 'react
 import { Editor } from 'tldraw'
 import { COMMENT_SHAPE_TYPE, type CommentShape } from '../canvas/CommentShape'
 import { renderMarkdown } from '../../lib/markdown'
+import { updateLinkedIssues } from '../../lib/mentions'
+import { useRepoFullName } from '../../lib/collaborators-context'
 
 type FilterMode = 'open' | 'closed' | 'all'
 
@@ -13,6 +15,7 @@ interface CommentData {
   shapeId: string
   text: string
   author: string
+  linkedIssueNumbers: string
   resolved: boolean
 }
 
@@ -100,6 +103,7 @@ const styles = {
 export default function CommentsPanel({ editorRef }: CommentsPanelProps): JSX.Element {
   const [comments, setComments] = useState<CommentData[]>([])
   const [filter, setFilter] = useState<FilterMode>('open')
+  const repoFullName = useRepoFullName()
 
   // Poll for comment shapes on the canvas
   useEffect(() => {
@@ -116,7 +120,8 @@ export default function CommentsPanel({ editorRef }: CommentsPanelProps): JSX.El
           shapeId: s.id,
           text: s.props.text,
           author: s.props.author,
-          resolved: s.props.resolved
+          resolved: s.props.resolved,
+          linkedIssueNumbers: s.props.linkedIssueNumbers || '[]'
         }))
       )
     }
@@ -158,16 +163,27 @@ export default function CommentsPanel({ editorRef }: CommentsPanelProps): JSX.El
   )
 
   const toggleResolved = useCallback(
-    (shapeId: string, currentResolved: boolean) => {
+    (shapeId: string, currentResolved: boolean, linkedIssueNumbers: string) => {
       const editor = editorRef.current
       if (!editor) return
+      const newResolved = !currentResolved
       editor.updateShape({
         id: shapeId as any,
         type: COMMENT_SHAPE_TYPE,
-        props: { resolved: !currentResolved }
+        props: { resolved: newResolved }
       })
+
+      // Close or reopen linked GitHub issues
+      try {
+        const issueNums: number[] = JSON.parse(linkedIssueNumbers || '[]')
+        if (issueNums.length > 0) {
+          updateLinkedIssues(issueNums, newResolved ? 'closed' : 'open', repoFullName)
+        }
+      } catch {
+        // ignore parse errors
+      }
     },
-    [editorRef]
+    [editorRef, repoFullName]
   )
 
   const renderBody = (text: string): string => {
@@ -252,7 +268,7 @@ export default function CommentsPanel({ editorRef }: CommentsPanelProps): JSX.El
                 style={styles.actionBtn}
                 onClick={(e) => {
                   e.stopPropagation()
-                  toggleResolved(c.shapeId, c.resolved)
+                  toggleResolved(c.shapeId, c.resolved, c.linkedIssueNumbers)
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#666')}
                 onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#333')}
