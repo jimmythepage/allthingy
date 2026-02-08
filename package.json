@@ -1,6 +1,6 @@
 {
   "name": "allthingy",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Infinite canvas with markdown notebooks, powered by GitHub",
   "main": "./out/main/index.js",
   "scripts": {
@@ -16,6 +16,7 @@
   "build": {
     "appId": "com.allthingy.app",
     "productName": "AllThingy",
+    "publish": "never",
     "directories": {
       "output": "release"
     },
