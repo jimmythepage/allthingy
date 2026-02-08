@@ -7,11 +7,6 @@ import { registerGitHandlers } from './ipc/git-operations'
 import { registerSharingHandlers } from './ipc/github-sharing'
 
 function createWindow(): void {
-  // Icon path: in dev it's in project root, in prod it's in resources
-  const iconPath = is.dev
-    ? join(__dirname, '../../resources/icon.png')
-    : join(__dirname, '../../resources/icon.png')
-
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -21,7 +16,6 @@ function createWindow(): void {
     title: 'AllThingy',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
-    icon: iconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
