@@ -14,7 +14,9 @@ import {
 import { renderMarkdown } from '../../lib/markdown'
 import MarkdownEditor from '../editor/MarkdownEditor'
 import { wikilinkAutocomplete } from '../editor/WikilinkPlugin'
+import { mentionAutocomplete } from '../editor/MentionPlugin'
 import { resolveWikilink, parseWikilinks, type NotebookInfo } from '../../lib/wikilinks'
+import { useCollaborators } from '../../lib/collaborators-context'
 import { useCallback, useMemo } from 'react'
 
 // --- Shape type registration ---
@@ -120,6 +122,13 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
     return wikilinkAutocomplete(getNotebooks)
   }, [getNotebooks])
 
+  // Mention autocomplete: read collaborators from context (set at Board level)
+  const collaborators = useCollaborators()
+  const getCollaborators = useCallback(() => collaborators, [collaborators])
+  const mentionExt = useMemo(() => {
+    return mentionAutocomplete(getCollaborators)
+  }, [getCollaborators])
+
   const handleChange = useCallback(
     (value: string) => {
       editor.updateShape<MarkdownNotebookShape>({
@@ -160,7 +169,6 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
 
       const resolved = resolveWikilink(wikilinkTarget, notebooks)
       if (resolved) {
-        // Navigate to the target shape: select it and center on it
         editor.select(resolved.shapeId as any)
         const targetShape = editor.getShape(resolved.shapeId as any)
         if (targetShape) {
@@ -243,7 +251,7 @@ function MarkdownNotebookComponent({ shape }: { shape: MarkdownNotebookShape }):
             initialValue={shape.props.markdown}
             onChange={handleChange}
             autoFocus
-            extensions={[wikilinkExt]}
+            extensions={[wikilinkExt, mentionExt]}
           />
         ) : (
           <div

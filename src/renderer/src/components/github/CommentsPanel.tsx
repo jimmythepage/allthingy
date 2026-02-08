@@ -27,42 +27,37 @@ interface Issue {
 
 const styles = {
   container: {
-    width: 300,
-    height: '100%',
-    background: '#161616',
-    borderLeft: '1px solid #2a2a2a',
     display: 'flex',
     flexDirection: 'column' as const,
-    flexShrink: 0
+    height: '100%'
   },
   header: {
-    padding: '12px 16px',
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#aaa',
-    borderBottom: '1px solid #2a2a2a',
+    padding: '8px 12px',
+    fontSize: 12,
+    color: '#888',
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    borderBottom: '1px solid #2a2a2a'
   },
   list: {
     flex: 1,
     overflow: 'auto',
-    padding: '8px 0'
+    padding: '4px 0'
   },
   comment: {
-    padding: '10px 16px',
+    padding: '8px 12px',
     borderBottom: '1px solid #222'
   },
   commentHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 6
+    gap: 6,
+    marginBottom: 4
   },
   avatar: {
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     borderRadius: '50%'
   },
   author: {
@@ -71,27 +66,27 @@ const styles = {
     color: '#ccc'
   },
   date: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#666',
     marginLeft: 'auto'
   },
   commentBody: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#bbb',
     lineHeight: 1.5
   },
   inputArea: {
-    padding: 12,
+    padding: 10,
     borderTop: '1px solid #2a2a2a',
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: 8
+    gap: 6
   },
   textarea: {
     width: '100%',
-    minHeight: 60,
+    minHeight: 50,
     padding: 8,
-    fontSize: 13,
+    fontSize: 12,
     background: '#1e1e1e',
     border: '1px solid #333',
     borderRadius: 6,
@@ -102,8 +97,8 @@ const styles = {
   },
   sendBtn: {
     alignSelf: 'flex-end' as const,
-    padding: '6px 14px',
-    fontSize: 12,
+    padding: '5px 12px',
+    fontSize: 11,
     background: 'var(--accent)',
     color: '#fff',
     borderRadius: 6,
@@ -111,17 +106,11 @@ const styles = {
     cursor: 'pointer'
   },
   empty: {
-    padding: '24px 16px',
+    padding: '20px 12px',
     fontSize: 13,
     color: '#555',
     textAlign: 'center' as const,
     lineHeight: 1.5
-  },
-  noAuth: {
-    padding: '24px 16px',
-    fontSize: 13,
-    color: '#666',
-    textAlign: 'center' as const
   }
 }
 
@@ -181,14 +170,12 @@ export default function CommentsPanel({
     setLoading(true)
     try {
       if (selectedIssue) {
-        // Add comment to existing issue
         await window.api.comments.addComment(
           token,
           repoFullName,
           selectedIssue.number,
           newComment.trim()
         )
-        // Refresh comments
         const result = await window.api.comments.getIssueComments(
           token,
           repoFullName,
@@ -196,10 +183,8 @@ export default function CommentsPanel({
         )
         setComments(result)
       } else {
-        // Create new issue
         const title = `Comment on ${boardId}`
         await window.api.comments.createIssue(token, repoFullName, title, newComment.trim())
-        // Refresh issues
         const result = await window.api.comments.listIssues(token, repoFullName)
         setIssues(result)
       }
@@ -214,8 +199,7 @@ export default function CommentsPanel({
   if (!token || !user) {
     return (
       <div style={styles.container}>
-        <div style={styles.header}>Comments</div>
-        <div style={styles.noAuth}>Connect GitHub in Settings to use comments.</div>
+        <div style={styles.empty}>Connect GitHub in Settings to use comments.</div>
       </div>
     )
   }
@@ -223,54 +207,54 @@ export default function CommentsPanel({
   if (!repoFullName) {
     return (
       <div style={styles.container}>
-        <div style={styles.header}>Comments</div>
-        <div style={styles.noAuth}>Set up GitHub Sync to enable comments.</div>
+        <div style={styles.empty}>Set up GitHub Sync to enable comments.</div>
       </div>
     )
   }
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
-    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  }
+
+  const renderBody = (body: string) => {
+    const { html } = renderMarkdown(body)
+    return html
   }
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <span>
-          {selectedIssue ? (
-            <button
-              style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: 13 }}
-              onClick={() => {
-                setSelectedIssue(null)
-                setComments([])
-              }}
-            >
-              &#8592; Comments
-            </button>
-          ) : (
-            'Comments'
-          )}
-        </span>
-        <span style={{ fontSize: 11, color: '#666' }}>{issues.length} threads</span>
-      </div>
+      {/* Mini header for back nav when inside a thread */}
+      {selectedIssue && (
+        <div style={styles.header}>
+          <button
+            style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: 12 }}
+            onClick={() => {
+              setSelectedIssue(null)
+              setComments([])
+            }}
+          >
+            &#8592; All threads
+          </button>
+          <span style={{ fontSize: 10, color: '#666' }}>
+            {comments.length} replies
+          </span>
+        </div>
+      )}
 
       <div style={styles.list}>
         {!selectedIssue && issues.length === 0 && (
           <div style={styles.empty}>
-            No comments yet. Start a discussion about this board.
+            No comments yet. Start a discussion.
           </div>
         )}
 
-        {/* Issue list view */}
+        {/* Issue list */}
         {!selectedIssue &&
           issues.map((issue) => (
             <div
               key={issue.number}
-              style={{
-                ...styles.comment,
-                cursor: 'pointer'
-              }}
+              style={{ ...styles.comment, cursor: 'pointer' }}
               onClick={() => setSelectedIssue(issue)}
               onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
@@ -280,19 +264,20 @@ export default function CommentsPanel({
                 <span style={styles.author}>{issue.user.login}</span>
                 <span style={styles.date}>{formatDate(issue.created_at)}</span>
               </div>
-              <div style={styles.commentBody}>
-                {issue.body?.slice(0, 120)}
-                {(issue.body?.length || 0) > 120 ? '...' : ''}
-              </div>
+              <div
+                className="markdown-preview"
+                style={styles.commentBody}
+                dangerouslySetInnerHTML={{ __html: renderBody(issue.body?.slice(0, 150) || '') }}
+              />
               {issue.comments > 0 && (
-                <span style={{ fontSize: 11, color: '#666', marginTop: 4, display: 'block' }}>
+                <span style={{ fontSize: 10, color: '#666', marginTop: 2, display: 'block' }}>
                   {issue.comments} replies
                 </span>
               )}
             </div>
           ))}
 
-        {/* Issue detail view */}
+        {/* Issue detail */}
         {selectedIssue && (
           <>
             <div style={styles.comment}>
@@ -301,7 +286,11 @@ export default function CommentsPanel({
                 <span style={styles.author}>{selectedIssue.user.login}</span>
                 <span style={styles.date}>{formatDate(selectedIssue.created_at)}</span>
               </div>
-              <div style={styles.commentBody}>{selectedIssue.body}</div>
+              <div
+                className="markdown-preview"
+                style={styles.commentBody}
+                dangerouslySetInnerHTML={{ __html: renderBody(selectedIssue.body || '') }}
+              />
             </div>
 
             {comments.map((c) => (
@@ -311,7 +300,11 @@ export default function CommentsPanel({
                   <span style={styles.author}>{c.user.login}</span>
                   <span style={styles.date}>{formatDate(c.created_at)}</span>
                 </div>
-                <div style={styles.commentBody}>{c.body}</div>
+                <div
+                  className="markdown-preview"
+                  style={styles.commentBody}
+                  dangerouslySetInnerHTML={{ __html: renderBody(c.body || '') }}
+                />
               </div>
             ))}
           </>
@@ -322,7 +315,11 @@ export default function CommentsPanel({
       <div style={styles.inputArea}>
         <textarea
           style={styles.textarea}
-          placeholder={selectedIssue ? 'Reply...' : 'Start a new discussion...'}
+          placeholder={
+            selectedIssue
+              ? 'Reply... (use @username to mention)'
+              : 'New discussion... (use @username to mention)'
+          }
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
           onKeyDown={(e) => {

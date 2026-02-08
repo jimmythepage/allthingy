@@ -5,7 +5,8 @@ import { MARKDOWN_NOTEBOOK_TYPE, type MarkdownNotebookShape } from './MarkdownSh
 
 /**
  * Renders SVG lines between notebooks that are linked via [[wikilinks]].
- * This is rendered as an overlay on the canvas.
+ * Rendered via OnTheCanvas, which is already in tldraw's page coordinate space —
+ * no camera transform needed.
  */
 export function ConnectionLines(): JSX.Element | null {
   const editor = useEditor()
@@ -22,8 +23,6 @@ export function ConnectionLines(): JSX.Element | null {
     },
     [editor]
   )
-
-  const camera = useValue('camera', () => editor.getCamera(), [editor])
 
   const connections = useMemo(() => {
     const notebooks = shapes.map((s) => ({
@@ -91,23 +90,19 @@ export function ConnectionLines(): JSX.Element | null {
           <polygon points="0 0, 8 3, 0 6" fill="rgba(167, 139, 250, 0.5)" />
         </marker>
       </defs>
-      <g
-        transform={`translate(${camera.x}, ${camera.y}) scale(${camera.z})`}
-      >
-        {connections.map((conn, i) => (
-          <line
-            key={`${conn.sourceId}-${conn.targetId}-${i}`}
-            x1={conn.sx}
-            y1={conn.sy}
-            x2={conn.tx}
-            y2={conn.ty}
-            stroke="rgba(167, 139, 250, 0.35)"
-            strokeWidth={2}
-            strokeDasharray="6 4"
-            markerEnd="url(#arrowhead)"
-          />
-        ))}
-      </g>
+      {connections.map((conn, i) => (
+        <line
+          key={`${conn.sourceId}-${conn.targetId}-${i}`}
+          x1={conn.sx}
+          y1={conn.sy}
+          x2={conn.tx}
+          y2={conn.ty}
+          stroke="rgba(167, 139, 250, 0.35)"
+          strokeWidth={2}
+          strokeDasharray="6 4"
+          markerEnd="url(#arrowhead)"
+        />
+      ))}
     </svg>
   )
 }

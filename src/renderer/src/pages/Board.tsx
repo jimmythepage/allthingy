@@ -17,14 +17,18 @@ import {
   MARKDOWN_NOTEBOOK_TYPE
 } from '../components/canvas/MarkdownShape'
 import { MarkdownNotebookTool } from '../components/canvas/MarkdownNotebookTool'
+import { CommentShapeUtil, COMMENT_SHAPE_TYPE } from '../components/canvas/CommentShape'
+import { CommentTool } from '../components/canvas/CommentTool'
+import { ConnectionLines } from '../components/canvas/ConnectionLines'
 import NotebookSidebar from '../components/sidebar/NotebookSidebar'
 import SyncStatus from '../components/github/SyncStatus'
 import SearchPalette from '../components/sidebar/SearchPalette'
+import { CollaboratorsProvider } from '../lib/collaborators-context'
 
 const AUTOSAVE_DELAY = 2000
 
-const customShapeUtils = [MarkdownNotebookUtil]
-const customTools = [MarkdownNotebookTool]
+const customShapeUtils = [MarkdownNotebookUtil, CommentShapeUtil]
+const customTools = [MarkdownNotebookTool, CommentTool]
 
 function CustomToolbar() {
   const tools = useTools()
@@ -58,8 +62,13 @@ function CustomToolbar() {
   )
 }
 
+function CanvasOverlay() {
+  return <ConnectionLines />
+}
+
 const customComponents: TLComponents = {
-  Toolbar: CustomToolbar
+  Toolbar: CustomToolbar,
+  OnTheCanvas: CanvasOverlay
 }
 
 const styles = {
@@ -293,6 +302,28 @@ export default function Board(): JSX.Element {
     })
   }
 
+  // Add comment shape (Miro-style sticky comment)
+  function addComment(): void {
+    const ed = editorRef.current
+    if (!ed) return
+
+    const viewportBounds = ed.getViewportPageBounds()
+    const cx = viewportBounds.x + viewportBounds.w / 2
+    const cy = viewportBounds.y + viewportBounds.h / 2
+
+    ed.createShape({
+      type: COMMENT_SHAPE_TYPE,
+      x: cx - 110,
+      y: cy - 60,
+      props: {
+        w: 220,
+        h: 120,
+        text: '',
+        author: 'You'
+      }
+    })
+  }
+
   // Keyboard shortcuts
   useEffect(() => {
     function handler(e: KeyboardEvent): void {
@@ -347,6 +378,7 @@ export default function Board(): JSX.Element {
   }
 
   return (
+    <CollaboratorsProvider workspacePath={workspacePath}>
     <div style={styles.container}>
       <div style={styles.titlebar} className="titlebar-drag">
         <button
@@ -377,6 +409,19 @@ export default function Board(): JSX.Element {
           onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
         >
           + Notebook
+        </button>
+        <button
+          style={styles.toolBtn}
+          className="titlebar-no-drag"
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            addComment()
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+        >
+          + Comment
         </button>
         <button
           style={{
@@ -418,7 +463,13 @@ export default function Board(): JSX.Element {
             onMount={handleMount}
           />
         </div>
-        {sidebarOpen && <NotebookSidebar editorRef={editorRef} />}
+        {sidebarOpen && (
+          <NotebookSidebar
+            editorRef={editorRef}
+            workspacePath={workspacePath}
+            boardId={boardId || ''}
+          />
+        )}
       </div>
 
       {/* Search Palette */}
@@ -426,5 +477,6 @@ export default function Board(): JSX.Element {
         <SearchPalette editor={editorRef.current} onClose={() => setShowSearch(false)} />
       )}
     </div>
+    </CollaboratorsProvider>
   )
 }

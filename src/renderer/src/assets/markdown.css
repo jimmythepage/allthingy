@@ -115,3 +115,11 @@
 .markdown-preview input[type="checkbox"] {
   margin-right: 6px;
 }
+
+.markdown-preview .mention {
+  color: #4f8ff7;
+  background: rgba(79, 143, 247, 0.12);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 500;
+}

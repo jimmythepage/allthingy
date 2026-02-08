@@ -2,9 +2,10 @@ import { Editor } from 'tldraw'
 import { useState, useEffect, useCallback, useMemo, type RefObject } from 'react'
 import { MARKDOWN_NOTEBOOK_TYPE, type MarkdownNotebookShape } from '../canvas/MarkdownShape'
 import { parseWikilinks, resolveWikilink, type NotebookInfo } from '../../lib/wikilinks'
-import GraphView from './GraphView'
+import CommentsPanel from '../github/CommentsPanel'
+import CollaboratorPanel from '../github/CollaboratorPanel'
 
-type TabId = 'notebooks' | 'graph'
+type TabId = 'notebooks' | 'comments' | 'collaborators'
 
 const styles = {
   container: {
@@ -23,7 +24,7 @@ const styles = {
   tab: {
     flex: 1,
     padding: '10px 0',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     textAlign: 'center' as const,
     cursor: 'pointer',
@@ -93,14 +94,18 @@ const styles = {
     color: '#555',
     textAlign: 'center' as const
   },
-  graphWrapper: {
+  tabContent: {
     flex: 1,
-    position: 'relative' as const
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column' as const
   }
 }
 
 interface NotebookSidebarProps {
   editorRef: RefObject<Editor | null>
+  workspacePath: string
+  boardId: string
 }
 
 interface NotebookData {
@@ -111,13 +116,35 @@ interface NotebookData {
   linkCount: number
 }
 
-export default function NotebookSidebar({ editorRef }: NotebookSidebarProps): JSX.Element {
+export default function NotebookSidebar({
+  editorRef,
+  workspacePath,
+  boardId
+}: NotebookSidebarProps): JSX.Element {
   const [notebooks, setNotebooks] = useState<NotebookData[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState<TabId>('notebooks')
+  const [repoFullName, setRepoFullName] = useState<string | null>(null)
 
-  // Poll for changes
+  // Derive repoFullName from git remote
+  useEffect(() => {
+    async function getRepoName(): Promise<void> {
+      try {
+        const remote = await window.api.git.getRemote(workspacePath)
+        if (!remote) return
+        const match = remote.match(/github\.com[:/](.+?)(?:\.git)?$/)
+        if (match) setRepoFullName(match[1])
+      } catch {
+        // no remote set up
+      }
+    }
+    getRepoName()
+    const interval = setInterval(getRepoName, 15000)
+    return () => clearInterval(interval)
+  }, [workspacePath])
+
+  // Poll for notebook changes
   useEffect(() => {
     function refresh(): void {
       const editor = editorRef.current
@@ -191,7 +218,16 @@ export default function NotebookSidebar({ editorRef }: NotebookSidebarProps): JS
       const editor = editorRef.current
       if (!editor) return
       editor.select(shapeId as any)
-      editor.zoomToSelection({ animation: { duration: 300 } })
+      const shape = editor.getShape(shapeId as any)
+      if (shape) {
+        const bounds = editor.getShapePageBounds(shape)
+        if (bounds) {
+          editor.centerOnPoint(
+            { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 },
+            { animation: { duration: 300 } }
+          )
+        }
+      }
     },
     [editorRef]
   )
@@ -200,29 +236,23 @@ export default function NotebookSidebar({ editorRef }: NotebookSidebarProps): JS
     <div style={styles.container}>
       {/* Tab bar */}
       <div style={styles.tabs}>
-        <button
-          style={{
-            ...styles.tab,
-            ...(activeTab === 'notebooks' ? styles.activeTab : {})
-          }}
-          onClick={() => setActiveTab('notebooks')}
-        >
-          Notebooks
-        </button>
-        <button
-          style={{
-            ...styles.tab,
-            ...(activeTab === 'graph' ? styles.activeTab : {})
-          }}
-          onClick={() => setActiveTab('graph')}
-        >
-          Graph
-        </button>
+        {(['notebooks', 'comments', 'collaborators'] as TabId[]).map((tab) => (
+          <button
+            key={tab}
+            style={{
+              ...styles.tab,
+              ...(activeTab === tab ? styles.activeTab : {})
+            }}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab === 'notebooks' ? 'Notes' : tab === 'comments' ? 'Comments' : 'Team'}
+          </button>
+        ))}
       </div>
 
       {/* Notebook list tab */}
       {activeTab === 'notebooks' && (
-        <>
+        <div style={styles.tabContent}>
           <input
             style={styles.search}
             placeholder="Search notebooks..."
@@ -291,23 +321,24 @@ export default function NotebookSidebar({ editorRef }: NotebookSidebarProps): JS
               </>
             )}
           </div>
-        </>
+        </div>
       )}
 
-      {/* Graph view tab */}
-      {activeTab === 'graph' && (
-        <div style={styles.graphWrapper}>
-          {notebooks.length === 0 ? (
-            <div style={styles.empty}>
-              Add some notebooks to see the graph.
-            </div>
-          ) : (
-            <GraphView
-              notebooks={notebooks}
-              onSelectNotebook={handleClick}
-              selectedId={selectedId}
-            />
-          )}
+      {/* Comments tab */}
+      {activeTab === 'comments' && (
+        <div style={styles.tabContent}>
+          <CommentsPanel
+            workspacePath={workspacePath}
+            boardId={boardId}
+            repoFullName={repoFullName}
+          />
+        </div>
+      )}
+
+      {/* Collaborators tab */}
+      {activeTab === 'collaborators' && (
+        <div style={styles.tabContent}>
+          <CollaboratorPanel repoFullName={repoFullName} />
         </div>
       )}
     </div>

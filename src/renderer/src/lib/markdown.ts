@@ -44,6 +44,39 @@ md.renderer.rules.wikilink = (tokens, idx) => {
   return `<a class="wikilink" data-target="${target}" href="#">${label}</a>`
 }
 
+// Custom rule: transform @mentions into styled spans
+md.inline.ruler.push('mention', (state) => {
+  const src = state.src
+  const pos = state.pos
+
+  // Must start with @ and be preceded by start-of-line or whitespace
+  if (src.charCodeAt(pos) !== 0x40) return false // @
+  if (pos > 0) {
+    const prev = src.charCodeAt(pos - 1)
+    // Must be preceded by whitespace, newline, or start of string
+    if (prev !== 0x20 && prev !== 0x0a && prev !== 0x0d && prev !== 0x28 && prev !== 0x5b) {
+      return false
+    }
+  }
+
+  // Match username pattern: @[a-zA-Z0-9_-]+
+  const match = src.slice(pos).match(/^@([a-zA-Z0-9_-]+)/)
+  if (!match) return false
+
+  const username = match[1]
+
+  const token = state.push('mention', '', 0)
+  token.content = username
+  state.pos = pos + match[0].length
+
+  return true
+})
+
+md.renderer.rules.mention = (tokens, idx) => {
+  const username = tokens[idx].content
+  return `<span class="mention" data-username="${username}">@${username}</span>`
+}
+
 export function renderMarkdown(content: string): { html: string; wikilinks: string[] } {
   const env: { wikilinks?: string[] } = {}
   const html = md.render(content, env)
