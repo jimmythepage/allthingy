@@ -256,7 +256,7 @@ export default function ReadNotebook(): JSX.Element {
   }, [rawContent])
 
   const handleSaveEdit = useCallback(async () => {
-    if (!workspacePath || !notebookId) return
+    if (!workspacePath || !notebookId || !boardId) return
     const { frontmatter } = parseFrontmatter(rawContent)
     const meta = {
       ...frontmatter,
@@ -264,10 +264,38 @@ export default function ReadNotebook(): JSX.Element {
       title: (frontmatter.title as string) || title,
       modified: new Date().toISOString()
     }
-    const content = buildNotebookContent(meta, editBody)
-    await window.api.notebook.save(workspacePath, notebookId, content)
-    setRawContent(content)
     const newTitle = (meta.title as string) || 'Untitled'
+    const content = buildNotebookContent(meta, editBody)
+
+    // 1. Save .md file
+    await window.api.notebook.save(workspacePath, notebookId, content)
+
+    // 2. Also update the board JSON so the shape has the new content
+    //    This prevents the board auto-save from overwriting with stale data
+    try {
+      const boardData = await window.api.board.load(workspacePath, boardId)
+      if (boardData?.tldrawDocument?.document?.store) {
+        const store = boardData.tldrawDocument.document.store as Record<string, Record<string, unknown>>
+        for (const record of Object.values(store)) {
+          if (
+            record?.typeName === 'shape' &&
+            record?.type === 'markdown-notebook'
+          ) {
+            const props = record.props as { notebookId?: string }
+            if (props?.notebookId === notebookId) {
+              ;(record.props as Record<string, unknown>).markdown = editBody
+              ;(record.props as Record<string, unknown>).title = newTitle
+              break
+            }
+          }
+        }
+        await window.api.board.save(workspacePath, boardId, boardData)
+      }
+    } catch (err) {
+      console.error('Failed to update board JSON:', err)
+    }
+
+    setRawContent(content)
     setTitle(newTitle)
     const { html } = renderMarkdown(editBody)
     setBodyHtml(html)
@@ -279,7 +307,7 @@ export default function ReadNotebook(): JSX.Element {
         p.notebookId === notebookId ? { ...p, title: newTitle } : p
       )
     )
-  }, [workspacePath, notebookId, rawContent, editBody, title])
+  }, [workspacePath, boardId, notebookId, rawContent, editBody, title])
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false)
