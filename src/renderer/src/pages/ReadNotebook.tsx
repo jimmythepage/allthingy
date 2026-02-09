@@ -230,24 +230,54 @@ export default function ReadNotebook(): JSX.Element {
     }
   }, [location.state, notebookId])
 
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback(async () => {
+    // Auto-save if we're in edit mode before going back
+    if (isEditing && workspacePath && notebookId && boardId) {
+      const { frontmatter } = parseFrontmatter(rawContent)
+      const meta = {
+        ...frontmatter,
+        id: notebookId,
+        title: (frontmatter.title as string) || title,
+        modified: new Date().toISOString()
+      }
+      const newTitle = (meta.title as string) || 'Untitled'
+      const content = buildNotebookContent(meta, editBody)
+      await window.api.notebook.save(workspacePath, notebookId, content)
+      try {
+        const boardData = await window.api.board.load(workspacePath, boardId)
+        if (boardData?.tldrawDocument?.document?.store) {
+          const store = boardData.tldrawDocument.document.store as Record<string, Record<string, unknown>>
+          for (const record of Object.values(store)) {
+            if (
+              record?.typeName === 'shape' &&
+              record?.type === 'markdown-notebook'
+            ) {
+              const props = record.props as { notebookId?: string }
+              if (props?.notebookId === notebookId) {
+                ;(record.props as Record<string, unknown>).markdown = editBody
+                ;(record.props as Record<string, unknown>).title = newTitle
+                break
+              }
+            }
+          }
+          await window.api.board.save(workspacePath, boardId, boardData)
+        }
+      } catch (err) {
+        console.error('Failed to update board JSON on back:', err)
+      }
+    }
     navigate(`/board/${encodeURIComponent(workspacePath)}/${boardId}`)
-  }, [navigate, workspacePath, boardId])
+  }, [navigate, workspacePath, boardId, isEditing, notebookId, rawContent, title, editBody])
 
-  // Esc: back to board or cancel edit
+  // Esc: back to board (auto-saves if editing)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (isEditing) {
-        setIsEditing(false)
-        setEditBody('')
-      } else {
-        handleBack()
-      }
+      handleBack()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isEditing, handleBack])
+  }, [handleBack])
 
   const handleStartEdit = useCallback(() => {
     const { body } = parseFrontmatter(rawContent)
