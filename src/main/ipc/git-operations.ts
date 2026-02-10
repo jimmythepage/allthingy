@@ -136,6 +136,16 @@ export function registerGitHandlers(): void {
     async (_event, workspacePath: string, token: string) => {
       const git = getGit(workspacePath)
 
+      // Abort any stuck rebase from a previous failed pull
+      if (existsSync(join(workspacePath, '.git', 'rebase-merge')) ||
+          existsSync(join(workspacePath, '.git', 'rebase-apply'))) {
+        try {
+          await git.rebase(['--abort'])
+        } catch {
+          // ignore — may already be clean
+        }
+      }
+
       const remotes = await git.getRemotes(true)
       const origin = remotes.find((r) => r.name === 'origin')
       if (!origin) throw new Error('No remote origin configured')
@@ -145,7 +155,7 @@ export function registerGitHandlers(): void {
       const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim() || 'main'
 
       try {
-        await git.pull(authedUrl, branch, ['--rebase'])
+        await git.pull(authedUrl, branch, ['--no-rebase'])
         return { success: true }
       } catch (err: unknown) {
         return { success: false, error: String(err) }

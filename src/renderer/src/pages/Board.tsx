@@ -199,13 +199,29 @@ export default function Board(): JSX.Element {
   // This state is only used to force re-render when editor becomes available
   const [, setEditorReady] = useState(0)
 
-  // Load existing board data on mount
+  // Load existing board data on mount — pull from GitHub first to get latest
   useEffect(() => {
     if (!workspacePath || !boardId) return
     let cancelled = false
 
     async function loadBoard(): Promise<void> {
       try {
+        // Pull latest from GitHub before loading (if connected)
+        const { token } = useGitHubStore.getState()
+        if (token) {
+          try {
+            const remote = await window.api.git.getRemote(workspacePath)
+            if (remote) {
+              const result = await window.api.git.pull(workspacePath, token)
+              if (!result.success) {
+                console.warn('[Board] Pull before load failed:', result.error)
+              }
+            }
+          } catch (err) {
+            console.warn('[Board] Pull before load error:', err)
+          }
+        }
+
         const data = await window.api.board.load(workspacePath, boardId!)
         if (cancelled) return
         if (data?.tldrawDocument) {
@@ -224,7 +240,7 @@ export default function Board(): JSX.Element {
     }
   }, [workspacePath, boardId])
 
-  // Auto-sync: commit + push to GitHub silently in the background
+  // Auto-sync: commit local changes, pull remote, then push
   const autoSync = useCallback(async (wsPath: string) => {
     const { token } = useGitHubStore.getState()
     if (!token) return
@@ -238,6 +254,8 @@ export default function Board(): JSX.Element {
         await window.api.git.commit(wsPath, `auto-save ${new Date().toISOString()}`)
       }
 
+      // Pull first to integrate remote changes, then push
+      await window.api.git.pull(wsPath, token)
       await window.api.git.push(wsPath, token)
     } catch (err) {
       console.warn('[AllThingy] Auto-sync failed:', err)
